@@ -1,0 +1,8 @@
+node_modules/
+.git/
+.github/
+*.log
+.DS_Store
+scratch/
+test/
+bizassert.config.js

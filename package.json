@@ -1,0 +1,27 @@
+{
+  "name": "@yavona/invariant",
+  "version": "0.1.0-alpha.1",
+  "description": "Invariant — The Business Invariant Layer for Software. Test payment webhooks, state mutations, and business invariants locally.",
+  "main": "src/index.js",
+  "bin": {
+    "invariant": "src/index.js"
+  },
+  "scripts": {
+    "test": "node src/index.js test stripe-webhooks",
+    "start": "node src/index.js"
+  },
+  "keywords": [
+    "invariant",
+    "business-invariants",
+    "webhook-testing",
+    "idempotency",
+    "stripe",
+    "razorpay",
+    "invariant-dev"
+  ],
+  "author": "Yavona Labs <dev@yavonalabs.com>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

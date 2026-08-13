@@ -1,0 +1,31 @@
+name: Invariant Business Correctness CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-invariants:
+    name: Run Invariant Business Outcome Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Project Dependencies
+        run: npm ci
+
+      - name: Start Application & Run Invariant Testing
+        run: |
+          npm start &
+          npx @yavona/invariant test payment
+        env:
+          INVARIANT_WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
