@@ -30,8 +30,11 @@ module.exports = {
     process.env.WEBHOOK_SECRET ||
     "whsec_yavona_secret_12345",
 
-  // Request Timeout in milliseconds
-  timeoutMs: Number(process.env.INVARIANT_TIMEOUT_MS || 5000),
+  // HTTP Request Timeout in milliseconds
+  httpTimeoutMs: Number(process.env.INVARIANT_HTTP_TIMEOUT_MS || 5000),
+
+  // DB Assertion Eventual Consistency Polling Timeout in milliseconds
+  assertionTimeoutMs: Number(process.env.INVARIANT_ASSERTION_TIMEOUT_MS || 5000),
 
   // Explicit Scenario Invariant Specifications
   invariants: [

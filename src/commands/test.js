@@ -216,20 +216,21 @@ async function executeStateReset(resetUrl, timeoutMs) {
 
 async function waitForAssertion({
   probeUrl,
-  timeoutMs,
+  httpTimeoutMs,
+  assertionTimeoutMs,
   assertState,
   httpRes,
   baselineState
 }) {
   const startedAt = Date.now();
-  const effectiveTimeoutMs = Math.max(timeoutMs, 500);
+  const effectiveTimeoutMs = Math.max(assertionTimeoutMs, 500);
 
   let lastState = null;
   let lastError = null;
 
   while (Date.now() - startedAt < effectiveTimeoutMs) {
     try {
-      const probeTimeout = Math.min(timeoutMs, 1500);
+      const probeTimeout = Math.min(httpTimeoutMs, 1500);
       lastState = await fetchProbeState(probeUrl, probeTimeout);
 
       let assertionResult = false;
@@ -266,7 +267,8 @@ async function handleTest(subcommand) {
   const startTime = Date.now();
   const config = loadConfig();
 
-  const timeoutMs = Number(config.timeoutMs || 5000);
+  const httpTimeoutMs = Number(config.httpTimeoutMs || config.timeoutMs || 5000);
+  const assertionTimeoutMs = Number(config.assertionTimeoutMs || config.timeoutMs || 5000);
 
   let providerName = String(config.provider || "stripe").toLowerCase().trim();
 
@@ -299,11 +301,11 @@ async function handleTest(subcommand) {
   }
 
   console.log(`[Config] Provider: ${fmt.yellow(providerName.toUpperCase())}`);
-  console.log(`[Config] Request Timeout: ${fmt.dim(`${timeoutMs}ms`)}`);
+  console.log(`[Config] HTTP Timeout: ${fmt.dim(`${httpTimeoutMs}ms`)} | DB Assertion Timeout: ${fmt.dim(`${assertionTimeoutMs}ms`)}`);
   console.log(`[Config] Invariants Count: ${fmt.bold(config.invariants.length)}`);
 
   try {
-    await fetchProbeState(config.probeUrl, timeoutMs);
+    await fetchProbeState(config.probeUrl, httpTimeoutMs);
   } catch (err) {
     console.error(`\n❌ ${fmt.red("REACHABILITY / PROBE ERROR")}: ${err.message}`);
     console.error(
@@ -335,7 +337,7 @@ async function handleTest(subcommand) {
 
     if (config.resetUrl) {
       try {
-        await executeStateReset(config.resetUrl, timeoutMs);
+        await executeStateReset(config.resetUrl, httpTimeoutMs);
       } catch (resetErr) {
         failuresCount++;
         console.log(
@@ -348,7 +350,7 @@ async function handleTest(subcommand) {
     let baselineState;
 
     try {
-      baselineState = await fetchProbeState(config.probeUrl, timeoutMs);
+      baselineState = await fetchProbeState(config.probeUrl, httpTimeoutMs);
     } catch (err) {
       failuresCount++;
       console.log(`❌ RESULT: ${fmt.badgeFail()} — ${fmt.red("Probe Error:")} ${err.message}`);
@@ -398,7 +400,7 @@ async function handleTest(subcommand) {
         "POST",
         payloadStr,
         headers,
-        timeoutMs
+        httpTimeoutMs
       );
 
       let duplicateRes = null;
@@ -410,7 +412,7 @@ async function handleTest(subcommand) {
           "POST",
           payloadStr,
           headers,
-          timeoutMs
+          httpTimeoutMs
         );
       }
 
@@ -423,7 +425,8 @@ async function handleTest(subcommand) {
 
       const assertion = await waitForAssertion({
         probeUrl: config.probeUrl,
-        timeoutMs,
+        httpTimeoutMs,
+        assertionTimeoutMs,
         assertState,
         httpRes,
         baselineState
