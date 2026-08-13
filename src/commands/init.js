@@ -1,7 +1,5 @@
 /**
- * Command:
- * npx invariant init
- *
+ * Command: `npx invariant init`
  * Auto-generates invariant.config.js in developer projects
  */
 
@@ -12,6 +10,15 @@ const fmt = require("../utils/formatter");
 const CONFIG_TEMPLATE = `/**
  * Invariant Configuration File (invariant.config.js)
  * Website: https://invariant.dev
+ *
+ * ⚠️ SECURITY NOTICE:
+ * Ensure your backend probe endpoints (/api/db-state, /api/reset-state)
+ * are strictly disabled in production environments:
+ * 
+ *   app.use(['/api/db-state', '/api/reset-state'], (req, res, next) => {
+ *     if (process.env.NODE_ENV === 'production') return res.status(404).end();
+ *     next();
+ *   });
  */
 
 module.exports = {

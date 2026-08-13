@@ -26,6 +26,59 @@ INVARIANT           ---> "Did the state mutation satisfy business post-condition
 
 ---
 
+## ⚠️ Security Best Practice: Protecting Probe Endpoints in Production
+
+State assertion probes (`/api/db-state`, `/api/reset-state`) must **never be exposed in production**.
+
+Add this simple 4-line middleware to your backend application:
+
+### Node.js / Express.js:
+```javascript
+// Block Invariant dev endpoints in production
+app.use(['/api/db-state', '/api/reset-state'], (req, res, next) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).end();
+  }
+  next();
+});
+```
+
+### Python / FastAPI:
+```python
+@app.get("/api/db-state")
+def get_db_state(request: Request):
+    if os.getenv("ENV") == "production":
+        raise HTTPException(status_code=404)
+    return {"paymentCount": Payment.objects.count()}
+```
+
+---
+
+## Failure Injection Contract (`server_error_resilience`)
+
+To test how your application handles database crashes or 500 errors during webhook processing without corrupting DB state, `Invariant` injects provider-accurate failure metadata into test payloads:
+
+* **Stripe**: `data.object.metadata.invariant_test = "trigger_db_failure"`
+* **Razorpay**: `payload.payment.entity.notes.invariant_test = "trigger_db_failure"`
+
+Program your local development backend to simulate a database failure when this flag is present:
+
+```javascript
+// Express.js Webhook Handler
+app.post('/api/webhooks/stripe', async (req, res) => {
+  const event = req.body;
+  
+  // Simulate mid-transaction DB failure when Invariant tests resilience
+  if (event.data?.object?.metadata?.invariant_test === 'trigger_db_failure') {
+    return res.status(500).json({ error: 'Simulated DB failure' });
+  }
+
+  // Normal processing...
+});
+```
+
+---
+
 ## Quickstart
 
 Run Invariant directly in any Node.js, Python, Java, or Go project with zero installation:
@@ -34,7 +87,6 @@ Run Invariant directly in any Node.js, Python, Java, or Go project with zero ins
 ```bash
 npx @yavona/invariant init
 ```
-This generates a clean `invariant.config.js` template in your project directory.
 
 ### 2. Execute Stripe Webhook Invariant Tests
 ```bash
@@ -43,74 +95,17 @@ INVARIANT_WEBHOOK_SECRET=whsec_xyz npx @yavona/invariant test stripe-webhooks
 
 ---
 
-## Terminal Scorecard Output
-
-```text
-============================================================
-Invariant CLI v0.1.0-alpha.1 — Business Layer
-Website: https://invariant.dev
-============================================================
-[Config] Target Webhook URL: http://localhost:3000/api/webhooks/stripe
-[Config] State Probe URL:   http://localhost:3000/api/db-state
-[Config] Provider:          STRIPE
-[Config] Request Timeout:   5000ms
-[Config] Invariants Count:  4
-
->>> EXECUTING SCENARIO PIPELINE: CLI → Webhook → State Probe → State Assertions
-
-------------------------------------------------------------
-[INVARIANT 1/4] idempotency (duplicate_delivery)
- Description: Duplicate webhook events must preserve single DB state record
-------------------------------------------------------------
- ↳ Dispatching duplicate webhook payload (ID: evt_inv_duplicate_delivery)...
-✅ RESULT: ✔ PASSED — HTTP 200 | DB State Verified
-------------------------------------------------------------
-[INVARIANT 2/4] security_signature (tampered_signature)
- Description: Invalid provider signature header must be rejected without mutating DB state
-------------------------------------------------------------
-✅ RESULT: ✔ PASSED — HTTP 401 | DB State Verified
-------------------------------------------------------------
-[INVARIANT 3/4] lifecycle_ordering (out_of_order)
- Description: Out-of-order refund events prior to payment must not corrupt state ledger
-------------------------------------------------------------
-✅ RESULT: ✔ PASSED — HTTP 200 | DB State Verified
-------------------------------------------------------------
-[INVARIANT 4/4] server_error_resilience (server_error_resilience)
- Description: Server 500 errors must be handled gracefully without inserting corrupt DB records
-------------------------------------------------------------
-✅ RESULT: ✔ PASSED — HTTP 500 | DB State Verified
-
-============================================================
- SUMMARY: 4/4 Invariants Passed (115ms)
- STATUS: 🟢 BUSINESS OUTCOME HEALTHY — All invariants hold true.
-============================================================
-```
-
----
-
 ## Explicit Scenario Schema (`invariant.config.js`)
 
 ```javascript
 module.exports = {
-  // Target API Webhook Endpoint
   targetUrl: process.env.INVARIANT_TARGET_URL || "http://localhost:3000/api/webhooks/stripe",
-  
-  // State Assertion Probe Endpoint (Queries backend DB state)
   probeUrl: process.env.INVARIANT_PROBE_URL || "http://localhost:3000/api/db-state",
-
-  // Optional State Reset Endpoint (Resets DB state before each scenario; default: null)
   resetUrl: process.env.INVARIANT_RESET_URL || null,
-  
-  // Payment Gateway Provider ('stripe' | 'razorpay')
   provider: process.env.INVARIANT_PROVIDER || "stripe",
-
-  // Gateway Signing Secret
-  webhookSecret: process.env.INVARIANT_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET || "whsec_stripe_secret_12345",
-
-  // Request Timeout & Eventual Consistency Polling Limit in milliseconds
+  webhookSecret: process.env.INVARIANT_WEBHOOK_SECRET || "whsec_stripe_secret_12345",
   timeoutMs: Number(process.env.INVARIANT_TIMEOUT_MS || 5000),
 
-  // Explicit Scenario Invariant Specifications
   invariants: [
     {
       scenario: "duplicate_delivery",
@@ -151,9 +146,7 @@ module.exports = {
 
 ---
 
-## Testing Locally with the Built-in Mock Server
-
-Invariant includes a zero-dependency mock backend server (`test/mock-server.js`) for instant local testing:
+## Testing Locally with Built-in Mock Server
 
 ```bash
 # Terminal 1: Launch Local Mock Backend Server
@@ -164,35 +157,6 @@ npm test
 
 # Terminal 3: Test Razorpay Webhook Invariants
 npm run test:razorpay
-```
-
----
-
-## GitHub Actions CI/CD Integration
-
-Add Invariant to your `.github/workflows/ci.yml` pipeline:
-
-```yaml
-name: Business Correctness CI
-
-on: [push, pull_request]
-
-jobs:
-  test-invariants:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Start Server & Run Invariant Tests
-        run: |
-          npm ci
-          npm start &
-          npx @yavona/invariant test stripe-webhooks
-        env:
-          INVARIANT_WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
 ```
 
 ---

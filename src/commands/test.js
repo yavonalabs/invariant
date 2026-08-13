@@ -229,7 +229,6 @@ async function waitForAssertion({
 
   while (Date.now() - startedAt < effectiveTimeoutMs) {
     try {
-      // Bound per-probe request timeout to 1500ms max so polling continues rapidly
       const probeTimeout = Math.min(timeoutMs, 1500);
       lastState = await fetchProbeState(probeUrl, probeTimeout);
 
@@ -330,7 +329,6 @@ async function handleTest(subcommand) {
     console.log(`Description: ${fmt.dim(inv.description || "")}`);
     console.log(`------------------------------------------------------------`);
 
-    // Check if assertion function is missing
     if (typeof inv.assertState !== "function" && typeof inv.assert !== "function") {
       console.log(`   ${fmt.yellow("⚠ No assertState/assert defined — invariant will auto-pass.")}`);
     }
@@ -463,6 +461,11 @@ async function handleTest(subcommand) {
         console.log(
           `❌ RESULT: ${fmt.badgeFail()} — HTTP ${httpRes.status}${httpFailMsg} | DB Payment Count: ${paymentCount}`
         );
+
+        if (scenario === "server_error_resilience" && httpRes.status !== 500) {
+          const keyName = providerName === "stripe" ? "metadata.invariant_test" : "notes.invariant_test";
+          console.log(`   ${fmt.yellow("💡 Hint:")} Backend did not return 500. Program your dev server to throw 500 when it detects ${keyName} === 'trigger_db_failure'`);
+        }
 
         if (assertion.error) {
           console.log(`   ${fmt.red("Probe/Assertion Error:")} ${assertion.error.message}`);
