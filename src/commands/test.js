@@ -229,9 +229,16 @@ async function waitForAssertion({
 
   while (Date.now() - startedAt < effectiveTimeoutMs) {
     try {
-      lastState = await fetchProbeState(probeUrl, timeoutMs);
+      // Bound per-probe request timeout to 1500ms max so polling continues rapidly
+      const probeTimeout = Math.min(timeoutMs, 1500);
+      lastState = await fetchProbeState(probeUrl, probeTimeout);
 
-      const assertionResult = Boolean(assertState(lastState, httpRes, baselineState));
+      let assertionResult = false;
+      try {
+        assertionResult = Boolean(assertState(lastState, httpRes, baselineState));
+      } catch (assertErr) {
+        lastError = new Error(`Assertion function error: ${assertErr.message}`);
+      }
 
       if (assertionResult) {
         return {
@@ -322,6 +329,11 @@ async function handleTest(subcommand) {
     );
     console.log(`Description: ${fmt.dim(inv.description || "")}`);
     console.log(`------------------------------------------------------------`);
+
+    // Check if assertion function is missing
+    if (typeof inv.assertState !== "function" && typeof inv.assert !== "function") {
+      console.log(`   ${fmt.yellow("⚠ No assertState/assert defined — invariant will auto-pass.")}`);
+    }
 
     if (config.resetUrl) {
       try {
