@@ -23,14 +23,14 @@ module.exports = {
   cyan: (txt) => `${colors.cyan}${txt}${colors.reset}`,
   yellow: (txt) => `${colors.yellow}${txt}${colors.reset}`,
   dim: (txt) => `${colors.dim}${txt}${colors.reset}`,
-  
+
   badgePass: () => `${colors.bold}${colors.green}✔ PASSED${colors.reset}`,
   badgeFail: () => `${colors.bold}${colors.red}✖ FAILED${colors.reset}`,
-  
+
   banner: () => {
     console.log(`\n${colors.bold}${colors.cyan}============================================================${colors.reset}`);
-    console.log(`        ${colors.bold}Invariant CLI v0.1.0-alpha.1${colors.reset} — Business Layer       `);
-    console.log(`        Website: ${colors.dim}https://invariant.dev${colors.reset}                      `);
+    console.log(`${colors.bold}Invariant CLI v0.1.0-alpha.1${colors.reset} — Business Layer`);
+    console.log(`Website: ${colors.dim}https://invariant.dev${colors.reset}`);
     console.log(`${colors.bold}${colors.cyan}============================================================${colors.reset}`);
   }
 };

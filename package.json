@@ -7,8 +7,11 @@
     "invariant": "src/index.js"
   },
   "scripts": {
+    "start": "node src/index.js",
     "test": "node src/index.js test stripe-webhooks",
-    "start": "node src/index.js"
+    "test:razorpay": "node src/index.js test razorpay-webhooks",
+    "mock": "node test/mock-server.js",
+    "syntax": "node --check src/index.js && node --check src/commands/init.js && node --check src/commands/test.js && node --check src/utils/formatter.js && node --check src/providers/stripe.js && node --check src/providers/razorpay.js"
   },
   "keywords": [
     "invariant",
@@ -17,11 +20,18 @@
     "idempotency",
     "stripe",
     "razorpay",
-    "invariant-dev"
+    "payment-testing",
+    "developer-tools"
   ],
   "author": "Yavona Labs <dev@yavonalabs.com>",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "files": [
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }
