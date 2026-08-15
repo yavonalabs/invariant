@@ -1,0 +1,11 @@
+image: node:20
+
+stages:
+  - test
+
+test_invariants:
+  stage: test
+  script:
+    - npm ci || npm install
+    - npm run syntax
+    - npm test --ci

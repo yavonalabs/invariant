@@ -3,6 +3,7 @@
 > **The Business Invariant Layer for Software.**  
 > Continuously prove your Stripe & Razorpay webhook implementations satisfy database state post-conditions in under 10 seconds.
 
+[![GitLab CI Pipeline](https://gitlab.com/jigsya23-group/invariant/badges/main/pipeline.svg)](https://gitlab.com/jigsya23-group/invariant/-/pipelines)
 [![NPM Version](https://img.shields.io/npm/v/@yavona/invariant.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/@yavona/invariant)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
@@ -36,7 +37,7 @@ app.get('/api/db-state', async (req, res) => {
   // Block probe route in production
   if (process.env.NODE_ENV === 'production') return res.status(404).end();
 
-  // Return state snapshot for Invariant assertions
+  // 💡 NOTE: Replace these calls with your ORM / SQL query layer (Prisma, Drizzle, Mongoose, Knex)
   const paymentCount = await db.payments.count();
   const ledgerBalance = await db.ledger.sum('amount');
   
@@ -156,26 +157,18 @@ module.exports = {
 Pass `--ci` or set `CI=true` / `INVARIANT_CI=true` in GitHub Actions or GitLab CI to strip ANSI escape codes and ASCII banners for clean log output:
 
 ```yaml
-name: Business Correctness CI
+# GitLab CI Config (.gitlab-ci.yml)
+image: node:20
 
-on: [push, pull_request]
+stages:
+  - test
 
-jobs:
-  test-invariants:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Start App & Run Invariant Tests
-        run: |
-          npm ci
-          npm start &
-          npx @yavona/invariant test stripe-webhooks --ci
-        env:
-          INVARIANT_WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+test_invariants:
+  stage: test
+  script:
+    - npm ci
+    - npm start &
+    - npx @yavona/invariant test stripe-webhooks --ci
 ```
 
 ---
@@ -183,7 +176,7 @@ jobs:
 ## Developer Validation & Feedback
 
 Trying `@yavona/invariant` in your dev environment? We would love to hear your feedback:
-* [Open a Developer Feedback Issue](https://github.com/yavona-labs/invariant/issues/new?template=feedback.md)
+* [Open a Developer Feedback Issue on GitLab](https://gitlab.com/jigsya23-group/invariant/-/issues/new)
 
 ---
 
