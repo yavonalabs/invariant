@@ -1,31 +1,33 @@
-name: Invariant Business Correctness CI
+name: Business Correctness CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
 
 jobs:
-  test-invariants:
-    name: Run Invariant Business Outcome Tests
+  test:
+    name: Run Invariant Self-Test Suite
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
 
-      - name: Setup Node.js Environment
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ matrix.node-version }}
 
-      - name: Install Project Dependencies
-        run: npm ci
+      - name: Install dependencies
+        run: npm ci || npm install
 
-      - name: Start Application & Run Invariant Testing
-        run: |
-          npm start &
-          npx @yavona/invariant test payment
-        env:
-          INVARIANT_WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+      - name: Check JavaScript Syntax
+        run: npm run syntax
+
+      - name: Run Invariant CLI Self-Test Suite
+        run: npm test --ci

@@ -26,21 +26,56 @@ INVARIANT           ---> "Did the database mutation satisfy business post-condit
 
 ---
 
-## ⚠️ Security Best Practice: Protecting Probe Endpoints in Production
+## ⚡ 2-Minute Express.js Starter Snippet
 
-State assertion probes (`/api/db-state`, `/api/reset-state`) must **never be exposed in production**.
+Add this lightweight probe endpoint to your local Express app to get instant state verification:
 
-Add this 4-line middleware to your backend:
-
-### Node.js / Express.js:
 ```javascript
-// Block Invariant dev endpoints in production
-app.use(['/api/db-state', '/api/reset-state'], (req, res, next) => {
-  if (process.env.NODE_ENV === 'production') {
-    return res.status(404).end();
-  }
-  next();
+// Express.js Backend Starter (/api/db-state)
+app.get('/api/db-state', async (req, res) => {
+  // Block probe route in production
+  if (process.env.NODE_ENV === 'production') return res.status(404).end();
+
+  // Return state snapshot for Invariant assertions
+  const paymentCount = await db.payments.count();
+  const ledgerBalance = await db.ledger.sum('amount');
+  
+  res.json({ paymentCount, ledgerBalance });
 });
+```
+
+---
+
+## ⚠️ Important Troubleshooting: Express `express.raw()` Body Parsing Gotcha
+
+If your application uses global `app.use(express.json())`, Stripe webhook signature validation will fail with a signature mismatch error. 
+
+Stripe HMAC verification requires the unparsed raw `Buffer` body. Fix this by using `express.raw()` specifically for your webhook route:
+
+```javascript
+// Express.js Webhook Route Setup
+app.post(
+  '/api/webhooks/stripe',
+  express.raw({ type: 'application/json' }), // Preserves raw Buffer for HMAC validation
+  async (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    let event;
+
+    try {
+      event = stripe.webhooks.constructEvent(req.body, sig, process.env.WEBHOOK_SECRET);
+    } catch (err) {
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    // Invariant Failure Injection Support
+    if (event.data?.object?.metadata?.invariant_test === 'trigger_db_failure') {
+      return res.status(500).json({ error: 'Simulated DB failure' });
+    }
+
+    // Process webhook...
+    res.json({ received: true });
+  }
+);
 ```
 
 ---
@@ -142,6 +177,13 @@ jobs:
         env:
           INVARIANT_WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
 ```
+
+---
+
+## Developer Validation & Feedback
+
+Trying `@yavona/invariant` in your dev environment? We would love to hear your feedback:
+* [Open a Developer Feedback Issue](https://github.com/yavona-labs/invariant/issues/new?template=feedback.md)
 
 ---
 
