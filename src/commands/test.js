@@ -224,8 +224,6 @@ async function waitForAssertion({
   expectHttpMatched
 }) {
   const startedAt = Date.now();
-  // If HTTP status failed expectation (e.g. got 500 when expecting 200), cap settle at 1000ms max.
-  // If HTTP status matched expectation, respect the full assertionTimeoutMs budget for async background queue workers!
   const maxSettleMs = expectHttpMatched ? Math.max(assertionTimeoutMs, 500) : 1000;
 
   let lastState = null;
@@ -251,8 +249,6 @@ async function waitForAssertion({
         };
       }
 
-      // ONLY settle early on unchanged state IF HTTP status failed expectations.
-      // If HTTP matched expected status, NEVER break early on unchanged state — respect assertionTimeoutMs for async queue workers.
       if (!expectHttpMatched && Date.now() - startedAt >= 600) {
         break;
       }
@@ -279,7 +275,6 @@ async function handleTest(subcommand) {
   const httpTimeoutMs = Number(config.httpTimeoutMs || config.timeoutMs || 5000);
   const assertionTimeoutMs = Number(config.assertionTimeoutMs || config.timeoutMs || 5000);
 
-  // Per-Run Nonce to guarantee unique Event IDs across consecutive test runs without resetUrl
   const runNonce = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
   let providerName = String(config.provider || "stripe").toLowerCase().trim();
@@ -327,6 +322,7 @@ async function handleTest(subcommand) {
   }
 
   let failuresCount = 0;
+  let signatureFailuresCount = 0;
 
   console.log(`\n>>> EXECUTING SCENARIO PIPELINE: CLI → Webhook → State Probe → State Assertions\n`);
 
@@ -370,7 +366,6 @@ async function handleTest(subcommand) {
     }
 
     const key = scenarioKey(scenario, i);
-    // Unique Event ID incorporating per-run nonce
     const eventId = `evt_inv_${key}_${runNonce}`;
 
     const triggerFailure = scenario === "server_error_resilience";
@@ -463,6 +458,10 @@ async function handleTest(subcommand) {
       } else {
         failuresCount++;
 
+        if (scenario !== "tampered_signature" && (httpRes.status === 400 || httpRes.status === 401)) {
+          signatureFailuresCount++;
+        }
+
         const expectedHttpStatus = formatExpectedHttp(inv.expectHttp);
 
         const httpFailMsg = !httpStatusMatched
@@ -505,6 +504,18 @@ async function handleTest(subcommand) {
   console.log(
     `SUMMARY: ${config.invariants.length - failuresCount}/${config.invariants.length} Invariants Passed (${durationMs}ms)`
   );
+
+  if (signatureFailuresCount >= 2) {
+    console.log(
+      `\n${fmt.yellow("💡 DIAGNOSTIC HINT:")} Multiple invariants failed with signature errors (HTTP 400/401).`
+    );
+    console.log(
+      `   This usually indicates global body-parsing middleware (e.g. express.json()) parsed the request before your webhook handler.`
+    );
+    console.log(
+      `   Ensure your webhook endpoint uses raw body parsing (e.g. express.raw({ type: 'application/json' })).\n`
+    );
+  }
 
   if (failuresCount === 0) {
     console.log(`STATUS: ${fmt.green("🟢 BUSINESS OUTCOME HEALTHY")} — All invariants hold true.`);
