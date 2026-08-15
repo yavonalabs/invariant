@@ -3,6 +3,8 @@
  * Supports --ci / CI / INVARIANT_CI color stripping for clean CI logs
  */
 
+const pkg = require("../../package.json");
+
 const isCI =
   Boolean(process.env.CI) ||
   Boolean(process.env.INVARIANT_CI) ||
@@ -29,14 +31,14 @@ const fmt = {
 
   banner: () => {
     if (isCI) {
-      console.log(`Invariant CLI v0.1.0-alpha.1 — Business Layer (https://invariant.dev)`);
+      console.log(`Invariant CLI v${pkg.version} — Business Layer (https://yavonalabs.com)`);
       return;
     }
     console.log(
       fmt.bold(`
 ============================================================
-Invariant CLI v0.1.0-alpha.1 — Business Layer
-Website: https://invariant.dev
+Invariant CLI v${pkg.version} — Business Layer
+Website: https://yavonalabs.com
 ============================================================`)
     );
   }
