@@ -3,7 +3,7 @@
 > **The Business Invariant Layer for Software.**  
 > Continuously prove your Stripe & Razorpay webhook implementations satisfy database state post-conditions in under 10 seconds.
 
-[![GitLab CI Pipeline](https://gitlab.com/jigsya23-group/invariant/badges/main/pipeline.svg)](https://gitlab.com/jigsya23-group/invariant/-/pipelines)
+[![GitHub Actions CI](https://github.com/yavonalabs/invariant/actions/workflows/ci.yml/badge.svg)](https://github.com/yavonalabs/invariant/actions)
 [![NPM Version](https://img.shields.io/npm/v/@yavona/invariant.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/@yavona/invariant)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
@@ -157,18 +157,25 @@ module.exports = {
 Pass `--ci` or set `CI=true` / `INVARIANT_CI=true` in GitHub Actions or GitLab CI to strip ANSI escape codes and ASCII banners for clean log output:
 
 ```yaml
-# GitLab CI Config (.gitlab-ci.yml)
-image: node:20
+# GitHub Actions Config (.github/workflows/ci.yml)
+name: CI Suite
 
-stages:
-  - test
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
-test_invariants:
-  stage: test
-  script:
-    - npm ci
-    - npm start &
-    - npx @yavona/invariant test stripe-webhooks --ci
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test --ci
 ```
 
 ---
@@ -176,7 +183,7 @@ test_invariants:
 ## Developer Validation & Feedback
 
 Trying `@yavona/invariant` in your dev environment? We would love to hear your feedback:
-* [Open a Developer Feedback Issue on GitLab](https://gitlab.com/jigsya23-group/invariant/-/issues/new)
+* [Open a Developer Feedback Issue on GitHub](https://github.com/yavonalabs/invariant/issues/new?template=feedback.md)
 
 ---
 
