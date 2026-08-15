@@ -1,12 +1,12 @@
 /**
  * Invariant Configuration File (invariant.config.js)
- * Website: https://invariant.dev
+ * Website: https://yavonalabs.com
  */
 
 const envResetUrl = process.env.INVARIANT_RESET_URL;
-const resetUrl = (envResetUrl === "" || envResetUrl === "null" || envResetUrl === "false") 
-  ? null 
-  : (envResetUrl || "http://localhost:3001/api/reset-state");
+const resetUrl = envResetUrl === undefined
+  ? "http://localhost:3001/api/reset-state"
+  : (envResetUrl === "" || envResetUrl === "null" || envResetUrl === "false" ? null : envResetUrl);
 
 module.exports = {
   // Target API Webhook Endpoint
