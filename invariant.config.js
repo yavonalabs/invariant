@@ -3,6 +3,11 @@
  * Website: https://invariant.dev
  */
 
+const envResetUrl = process.env.INVARIANT_RESET_URL;
+const resetUrl = (envResetUrl === "" || envResetUrl === "null" || envResetUrl === "false") 
+  ? null 
+  : (envResetUrl || "http://localhost:3001/api/reset-state");
+
 module.exports = {
   // Target API Webhook Endpoint
   targetUrl:
@@ -15,9 +20,7 @@ module.exports = {
     "http://localhost:3001/api/db-state",
 
   // Optional Reset Endpoint (Resets DB state before each scenario)
-  resetUrl:
-    process.env.INVARIANT_RESET_URL ||
-    "http://localhost:3001/api/reset-state",
+  resetUrl: resetUrl,
 
   // Payment Gateway Provider ('stripe' | 'razorpay')
   provider:

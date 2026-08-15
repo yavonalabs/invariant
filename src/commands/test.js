@@ -220,15 +220,19 @@ async function waitForAssertion({
   assertionTimeoutMs,
   assertState,
   httpRes,
-  baselineState
+  baselineState,
+  expectHttpMatched
 }) {
   const startedAt = Date.now();
-  const effectiveTimeoutMs = Math.max(assertionTimeoutMs, 500);
+  // Fast settle window (1s) if HTTP status failed centrally, otherwise full assertionTimeoutMs
+  const maxSettleMs = expectHttpMatched ? Math.max(assertionTimeoutMs, 500) : 1000;
 
   let lastState = null;
   let lastError = null;
+  let lastStateStr = "";
+  let unchangedCount = 0;
 
-  while (Date.now() - startedAt < effectiveTimeoutMs) {
+  while (Date.now() - startedAt < maxSettleMs) {
     try {
       const probeTimeout = Math.min(httpTimeoutMs, 1500);
       lastState = await fetchProbeState(probeUrl, probeTimeout);
@@ -247,6 +251,19 @@ async function waitForAssertion({
           error: null
         };
       }
+
+      // Smart Early Settlement: If state remains unchanged 3 times in a row (~600ms) after HTTP response, settle early
+      const currentStateStr = JSON.stringify(lastState);
+      if (currentStateStr === lastStateStr) {
+        unchangedCount++;
+        if (unchangedCount >= 3) {
+          break; // Stop polling early, state has settled
+        }
+      } else {
+        lastStateStr = currentStateStr;
+        unchangedCount = 0;
+      }
+
     } catch (err) {
       lastError = err;
     }
@@ -269,6 +286,9 @@ async function handleTest(subcommand) {
 
   const httpTimeoutMs = Number(config.httpTimeoutMs || config.timeoutMs || 5000);
   const assertionTimeoutMs = Number(config.assertionTimeoutMs || config.timeoutMs || 5000);
+
+  // Per-Run Nonce to guarantee unique Event IDs across consecutive test runs without resetUrl
+  const runNonce = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
   let providerName = String(config.provider || "stripe").toLowerCase().trim();
 
@@ -358,7 +378,8 @@ async function handleTest(subcommand) {
     }
 
     const key = scenarioKey(scenario, i);
-    const eventId = `evt_inv_${key}`;
+    // Unique Event ID incorporating per-run nonce
+    const eventId = `evt_inv_${key}_${runNonce}`;
 
     const triggerFailure = scenario === "server_error_resilience";
 
@@ -416,6 +437,14 @@ async function handleTest(subcommand) {
         );
       }
 
+      const primaryHttpMatch = httpStatusMatches(httpRes.status, inv.expectHttp);
+
+      const duplicateHttpMatch = duplicateRes
+        ? httpStatusMatches(duplicateRes.status, inv.expectHttp)
+        : true;
+
+      const httpStatusMatched = primaryHttpMatch && duplicateHttpMatch;
+
       const assertState =
         typeof inv.assertState === "function"
           ? inv.assertState
@@ -429,16 +458,10 @@ async function handleTest(subcommand) {
         assertionTimeoutMs,
         assertState,
         httpRes,
-        baselineState
+        baselineState,
+        expectHttpMatched: httpStatusMatched
       });
 
-      const primaryHttpMatch = httpStatusMatches(httpRes.status, inv.expectHttp);
-
-      const duplicateHttpMatch = duplicateRes
-        ? httpStatusMatches(duplicateRes.status, inv.expectHttp)
-        : true;
-
-      const httpStatusMatched = primaryHttpMatch && duplicateHttpMatch;
       const passed = httpStatusMatched && assertion.passed;
 
       if (passed) {
