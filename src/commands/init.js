@@ -1,6 +1,6 @@
 /**
- * Command: `npx invariant init`
- * Auto-generates invariant.config.js in developer projects
+ * Invariant CLI Configuration Initializer
+ * Command: npx @yavona/invariant init
  */
 
 const fs = require("fs");
@@ -9,33 +9,27 @@ const fmt = require("../utils/formatter");
 
 const CONFIG_TEMPLATE = `/**
  * Invariant Configuration File (invariant.config.js)
- * Website: https://invariant.dev
- *
- * ⚠️ SECURITY NOTICE:
- * Ensure your backend probe endpoints (/api/db-state, /api/reset-state)
- * are strictly disabled in production environments:
- * 
- *   app.use(['/api/db-state', '/api/reset-state'], (req, res, next) => {
- *     if (process.env.NODE_ENV === 'production') return res.status(404).end();
- *     next();
- *   });
+ * Website: https://yavonalabs.com
  */
+
+const envResetUrl = process.env.INVARIANT_RESET_URL;
+const resetUrl = envResetUrl === undefined
+  ? "http://localhost:3001/api/reset-state"
+  : (envResetUrl === "" || envResetUrl === "null" || envResetUrl === "false" ? null : envResetUrl);
 
 module.exports = {
   // Target API Webhook Endpoint
   targetUrl:
     process.env.INVARIANT_TARGET_URL ||
-    "http://localhost:3000/api/webhooks/stripe",
+    "http://localhost:3001/api/webhook",
 
   // State Assertion Probe Endpoint (Queries backend DB state)
   probeUrl:
     process.env.INVARIANT_PROBE_URL ||
-    "http://localhost:3000/api/db-state",
+    "http://localhost:3001/api/db-state",
 
-  // Optional State Reset Endpoint (Resets DB state before each scenario; default: null)
-  resetUrl:
-    process.env.INVARIANT_RESET_URL ||
-    null,
+  // Optional Reset Endpoint (Resets DB state before each scenario)
+  resetUrl: resetUrl,
 
   // Payment Gateway Provider ('stripe' | 'razorpay')
   provider:
@@ -121,7 +115,7 @@ function handleInit() {
     console.log(
       `1. Open ${fmt.cyan("invariant.config.js")} and customize your targetUrl and probeUrl.`
     );
-    console.log(`2. Run ${fmt.bold("npx invariant test stripe-webhooks")} to execute invariants testing.\n`);
+    console.log(`2. Run ${fmt.bold("npx @yavona/invariant test stripe-webhooks")} to execute invariants testing.\n`);
 
     process.exit(0);
   } catch (err) {
