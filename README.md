@@ -10,19 +10,19 @@
 
 ---
 
-## The Problem
+## What Invariant Is (and Isn't)
 
-Traditional observability tools (Datadog, Sentry, Healthchecks.io) tell you if your server is running or throwing exceptions. **They do not automatically prove business post-conditions unless teams manually instrument those invariants.**
+**Invariant is NOT a simple HTTP event trigger tool like `stripe trigger`.**
 
-Your payment webhook handler can return **`HTTP 200 OK`** while silently double-charging a customer, corrupting database ledgers on out-of-order refunds, or inserting bad records prior to a 500 crash.
+`stripe trigger` dispatches webhooks to your application with zero verification of what happens inside your database.
+
+**Invariant is a Business Invariant Assertion Engine.** It queries your application's state probe endpoint (`/api/db-state`) to mathematically prove that your backend state mutations satisfied business post-conditions—even across async Redis/BullMQ queue workers.
 
 ```
 Datadog / Sentry    ---> "Is the application throwing runtime exceptions?"
-Healthchecks.io     ---> "Did the background process execute?"
-INVARIANT           ---> "Did the state mutation satisfy business post-conditions?"
+Stripe CLI trigger  ---> "Did the webhook HTTP request get sent?"
+INVARIANT           ---> "Did the database mutation satisfy business post-conditions?"
 ```
-
-**Invariant** continuously tests your backend against real-world provider edge cases (duplicate deliveries, out-of-order lifecycle events, tampered HMAC signatures) and verifies database state invariants (`(state.paymentCount ?? 0) === baseline.paymentCount + 1`).
 
 ---
 
@@ -30,7 +30,7 @@ INVARIANT           ---> "Did the state mutation satisfy business post-condition
 
 State assertion probes (`/api/db-state`, `/api/reset-state`) must **never be exposed in production**.
 
-Add this simple 4-line middleware to your backend application:
+Add this 4-line middleware to your backend:
 
 ### Node.js / Express.js:
 ```javascript
@@ -40,40 +40,6 @@ app.use(['/api/db-state', '/api/reset-state'], (req, res, next) => {
     return res.status(404).end();
   }
   next();
-});
-```
-
-### Python / FastAPI:
-```python
-@app.get("/api/db-state")
-def get_db_state(request: Request):
-    if os.getenv("ENV") == "production":
-        raise HTTPException(status_code=404)
-    return {"paymentCount": Payment.objects.count()}
-```
-
----
-
-## Failure Injection Contract (`server_error_resilience`)
-
-To test how your application handles database crashes or 500 errors during webhook processing without corrupting DB state, `Invariant` injects provider-accurate failure metadata into test payloads:
-
-* **Stripe**: `data.object.metadata.invariant_test = "trigger_db_failure"`
-* **Razorpay**: `payload.payment.entity.notes.invariant_test = "trigger_db_failure"`
-
-Program your local development backend to simulate a database failure when this flag is present:
-
-```javascript
-// Express.js Webhook Handler
-app.post('/api/webhooks/stripe', async (req, res) => {
-  const event = req.body;
-  
-  // Simulate mid-transaction DB failure when Invariant tests resilience
-  if (event.data?.object?.metadata?.invariant_test === 'trigger_db_failure') {
-    return res.status(500).json({ error: 'Simulated DB failure' });
-  }
-
-  // Normal processing...
 });
 ```
 
@@ -95,7 +61,9 @@ INVARIANT_WEBHOOK_SECRET=whsec_xyz npx @yavona/invariant test stripe-webhooks
 
 ---
 
-## Explicit Scenario Schema (`invariant.config.js`)
+## Rich Real-World Invariant Assertions (`invariant.config.js`)
+
+Invariant supports rich, arbitrary multi-table JSON state assertions against your application's probe endpoint:
 
 ```javascript
 module.exports = {
@@ -104,16 +72,18 @@ module.exports = {
   resetUrl: process.env.INVARIANT_RESET_URL || null,
   provider: process.env.INVARIANT_PROVIDER || "stripe",
   webhookSecret: process.env.INVARIANT_WEBHOOK_SECRET || "whsec_stripe_secret_12345",
-  timeoutMs: Number(process.env.INVARIANT_TIMEOUT_MS || 5000),
+  httpTimeoutMs: Number(process.env.INVARIANT_HTTP_TIMEOUT_MS || 5000),
+  assertionTimeoutMs: Number(process.env.INVARIANT_ASSERTION_TIMEOUT_MS || 5000),
 
   invariants: [
     {
       scenario: "duplicate_delivery",
-      name: "idempotency",
-      description: "Duplicate webhook events must preserve single DB state record",
+      name: "ledger_idempotency",
+      description: "Duplicate webhooks must preserve single payment row and exact ledger balance",
       expectHttp: [200, 202],
       assertState: (state, httpRes, baseline) =>
-        (state.paymentCount ?? 0) === ((baseline.paymentCount ?? 0) + 1)
+        (state.paymentCount ?? 0) === ((baseline.paymentCount ?? 0) + 1) &&
+        (state.ledgerBalance ?? 0) === ((baseline.ledgerBalance ?? 0) + 5000)
     },
     {
       scenario: "tampered_signature",
@@ -125,11 +95,11 @@ module.exports = {
     },
     {
       scenario: "out_of_order",
-      name: "lifecycle_ordering",
+      name: "refund_bounds_check",
       description: "Out-of-order refund events prior to payment must not corrupt state ledger",
       expectHttp: [200, 202, 400],
       assertState: (state, httpRes, baseline) =>
-        (state.paymentCount ?? 0) === (baseline.paymentCount ?? 0) &&
+        (state.refundedAmount ?? 0) <= (state.capturedAmount ?? 0) &&
         (state.payments || []).every((p) => p.status !== "CORRUPTED")
     },
     {
@@ -146,17 +116,31 @@ module.exports = {
 
 ---
 
-## Testing Locally with Built-in Mock Server
+## Clean Output for CI/CD Pipelines (`--ci` Flag)
 
-```bash
-# Terminal 1: Launch Local Mock Backend Server
-npm run mock
+Pass `--ci` or set `CI=true` / `INVARIANT_CI=true` in GitHub Actions or GitLab CI to strip ANSI escape codes and ASCII banners for clean log output:
 
-# Terminal 2: Test Stripe Webhook Invariants
-npm test
+```yaml
+name: Business Correctness CI
 
-# Terminal 3: Test Razorpay Webhook Invariants
-npm run test:razorpay
+on: [push, pull_request]
+
+jobs:
+  test-invariants:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Start App & Run Invariant Tests
+        run: |
+          npm ci
+          npm start &
+          npx @yavona/invariant test stripe-webhooks --ci
+        env:
+          INVARIANT_WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
 ```
 
 ---

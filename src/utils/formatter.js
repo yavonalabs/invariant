@@ -1,36 +1,45 @@
 /**
- * Invariant CLI Terminal Formatter
- * Zero-dependency ANSI formatting utilities
+ * Output Formatter & ANSI Terminal Color Utilities
+ * Supports --ci / CI / INVARIANT_CI color stripping for clean CI logs
  */
 
-const colors = {
-  reset: "\x1b[0m",
-  bold: "\x1b[1m",
-  dim: "\x1b[2m",
-  green: "\x1b[32m",
-  red: "\x1b[31m",
-  yellow: "\x1b[33m",
-  cyan: "\x1b[36m",
-  white: "\x1b[37m",
-  bgRed: "\x1b[41m",
-  bgGreen: "\x1b[42m"
-};
+const isCI =
+  Boolean(process.env.CI) ||
+  Boolean(process.env.INVARIANT_CI) ||
+  process.argv.includes("--ci");
 
-module.exports = {
-  bold: (txt) => `${colors.bold}${txt}${colors.reset}`,
-  green: (txt) => `${colors.green}${txt}${colors.reset}`,
-  red: (txt) => `${colors.red}${txt}${colors.reset}`,
-  cyan: (txt) => `${colors.cyan}${txt}${colors.reset}`,
-  yellow: (txt) => `${colors.yellow}${txt}${colors.reset}`,
-  dim: (txt) => `${colors.dim}${txt}${colors.reset}`,
+const supportsColor = !isCI && process.stdout.isTTY !== false;
 
-  badgePass: () => `${colors.bold}${colors.green}✔ PASSED${colors.reset}`,
-  badgeFail: () => `${colors.bold}${colors.red}✖ FAILED${colors.reset}`,
+function code(open, close, str) {
+  if (!supportsColor) return str;
+  return `${open}${str}${close}`;
+}
+
+const fmt = {
+  isCI,
+  bold: (str) => code("\x1b[1m", "\x1b[22m", str),
+  dim: (str) => code("\x1b[2m", "\x1b[22m", str),
+  red: (str) => code("\x1b[31m", "\x1b[39m", str),
+  green: (str) => code("\x1b[32m", "\x1b[39m", str),
+  yellow: (str) => code("\x1b[33m", "\x1b[39m", str),
+  cyan: (str) => code("\x1b[36m", "\x1b[39m", str),
+
+  badgePass: () => (supportsColor ? "\x1b[42m\x1b[30m\x1b[1m ✔ PASSED \x1b[0m" : "[PASSED]"),
+  badgeFail: () => (supportsColor ? "\x1b[41m\x1b[37m\x1b[1m ✖ FAILED \x1b[0m" : "[FAILED]"),
 
   banner: () => {
-    console.log(`\n${colors.bold}${colors.cyan}============================================================${colors.reset}`);
-    console.log(`${colors.bold}Invariant CLI v0.1.0-alpha.1${colors.reset} — Business Layer`);
-    console.log(`Website: ${colors.dim}https://invariant.dev${colors.reset}`);
-    console.log(`${colors.bold}${colors.cyan}============================================================${colors.reset}`);
+    if (isCI) {
+      console.log(`Invariant CLI v0.1.0-alpha.1 — Business Layer (https://invariant.dev)`);
+      return;
+    }
+    console.log(
+      fmt.bold(`
+============================================================
+Invariant CLI v0.1.0-alpha.1 — Business Layer
+Website: https://invariant.dev
+============================================================`)
+    );
   }
 };
+
+module.exports = fmt;

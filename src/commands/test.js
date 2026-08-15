@@ -224,13 +224,12 @@ async function waitForAssertion({
   expectHttpMatched
 }) {
   const startedAt = Date.now();
-  // Fast settle window (1s) if HTTP status failed centrally, otherwise full assertionTimeoutMs
+  // If HTTP status failed expectation (e.g. got 500 when expecting 200), cap settle at 1000ms max.
+  // If HTTP status matched expectation, respect the full assertionTimeoutMs budget for async background queue workers!
   const maxSettleMs = expectHttpMatched ? Math.max(assertionTimeoutMs, 500) : 1000;
 
   let lastState = null;
   let lastError = null;
-  let lastStateStr = "";
-  let unchangedCount = 0;
 
   while (Date.now() - startedAt < maxSettleMs) {
     try {
@@ -252,18 +251,11 @@ async function waitForAssertion({
         };
       }
 
-      // Smart Early Settlement: If state remains unchanged 3 times in a row (~600ms) after HTTP response, settle early
-      const currentStateStr = JSON.stringify(lastState);
-      if (currentStateStr === lastStateStr) {
-        unchangedCount++;
-        if (unchangedCount >= 3) {
-          break; // Stop polling early, state has settled
-        }
-      } else {
-        lastStateStr = currentStateStr;
-        unchangedCount = 0;
+      // ONLY settle early on unchanged state IF HTTP status failed expectations.
+      // If HTTP matched expected status, NEVER break early on unchanged state — respect assertionTimeoutMs for async queue workers.
+      if (!expectHttpMatched && Date.now() - startedAt >= 600) {
+        break;
       }
-
     } catch (err) {
       lastError = err;
     }
