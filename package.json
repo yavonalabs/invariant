@@ -6,6 +6,11 @@
   "bin": {
     "invariant": "src/index.js"
   },
+  "homepage": "https://yavonalabs.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitlab.com/jigsya23-group/invariant.git"
+  },
   "scripts": {
     "start": "node src/index.js",
     "test": "node test/cli-self-test.js",

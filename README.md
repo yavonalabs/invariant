@@ -7,7 +7,7 @@
 [![NPM Version](https://img.shields.io/npm/v/@yavona/invariant.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/@yavona/invariant)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
-[![Website](https://img.shields.io/badge/website-invariant.dev-cyan.svg?style=flat-square)](https://invariant.dev)
+[![Website](https://img.shields.io/badge/website-yavonalabs.com-cyan.svg?style=flat-square)](https://yavonalabs.com)
 
 ---
 
@@ -182,4 +182,4 @@ Trying `@yavona/invariant` in your dev environment? We would love to hear your f
 
 ## License
 
-MIT © [Yavona Labs](https://invariant.dev)
+MIT © [Yavona Labs](https://yavonalabs.com)
