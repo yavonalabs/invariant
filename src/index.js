@@ -2,9 +2,9 @@
 
 /**
  * Invariant CLI Command Router
- * npx invariant
+ * npx @yavona/invariant
  *
- * Website: https://invariant.dev
+ * Website: https://yavonalabs.com
  */
 
 const fmt = require("./utils/formatter");
@@ -21,55 +21,53 @@ function printHelp() {
 
   console.log(`
 ${fmt.bold("USAGE:")}
-$ npx invariant <command> [subcommand] [options]
+$ npx @yavona/invariant <command> [subcommand] [options]
 
 ${fmt.bold("COMMANDS:")}
 ${fmt.cyan("init")}                    Generate template invariant.config.js in project
 ${fmt.cyan("test stripe-webhooks")}    Execute provider-accurate Stripe webhook state assertions
 ${fmt.cyan("test razorpay-webhooks")}  Execute provider-accurate Razorpay webhook state assertions
 ${fmt.cyan("test payment")}            Execute payment webhook state assertions using config provider
-${fmt.cyan("version")} / ${fmt.cyan("--version")}       Print Invariant CLI version
-${fmt.cyan("help")}    / ${fmt.cyan("--help")}          Print CLI usage & help options
+${fmt.cyan("version / --version")}       Print Invariant CLI version
+${fmt.cyan("help    / --help")}          Print CLI usage & help options
 
 ${fmt.bold("EXAMPLES:")}
-$ ${fmt.dim("npx invariant init")}
-$ ${fmt.dim("npx invariant test stripe-webhooks")}
-$ ${fmt.dim("INVARIANT_WEBHOOK_SECRET=whsec_xyz npx invariant test stripe-webhooks")}
+$ npx @yavona/invariant init
+$ npx @yavona/invariant test stripe-webhooks
+$ INVARIANT_WEBHOOK_SECRET=whsec_xyz npx @yavona/invariant test stripe-webhooks
 
 ${fmt.bold("WEBSITE:")}
-https://invariant.dev
+https://yavonalabs.com
 `);
-
-  process.exit(0);
 }
 
-function printVersion() {
-  console.log(`Invariant CLI v0.1.0-alpha.1`);
-  process.exit(0);
+async function main() {
+  switch (command) {
+    case "init":
+      await handleInit();
+      break;
+
+    case "test":
+      await handleTest(subcommand);
+      break;
+
+    case "version":
+    case "-v":
+    case "--version":
+      const pkg = require("../package.json");
+      console.log(`Invariant CLI v${pkg.version}`);
+      break;
+
+    case "help":
+    case "-h":
+    case "--help":
+    default:
+      printHelp();
+      break;
+  }
 }
 
-switch (command) {
-  case "init":
-    handleInit();
-    break;
-
-  case "test":
-    handleTest(subcommand).catch((err) => {
-      console.error(`\n❌ ${fmt.red("UNEXPECTED ERROR")}: ${err.message}\n`);
-      process.exit(1);
-    });
-    break;
-
-  case "version":
-  case "-v":
-  case "--version":
-    printVersion();
-    break;
-
-  case "help":
-  case "-h":
-  case "--help":
-  default:
-    printHelp();
-    break;
-}
+main().catch((err) => {
+  console.error(`\n❌ UNHANDLED INVARIANT EXCEPTION: ${err.message}`);
+  process.exit(1);
+});
