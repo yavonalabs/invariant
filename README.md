@@ -85,6 +85,8 @@ app.post(
 
 Run Invariant directly in any Node.js, Python, Java, or Go project with zero installation:
 
+> 💡 **Note**: The `@yavona/invariant` NPM package runs directly against your own local app endpoints (`targetUrl` & `probeUrl`). If you wish to run against our built-in standalone mock server demo (`test/mock-server.js`), clone the repository: `git clone https://github.com/yavonalabs/invariant.git`.
+
 ### 1. Initialize Configuration
 ```bash
 npx @yavona/invariant init
