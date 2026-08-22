@@ -9,6 +9,8 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
 [![Website](https://img.shields.io/badge/website-yavonalabs.com-cyan.svg?style=flat-square)](https://yavonalabs.com)
 
+![Invariant CLI Demo](https://raw.githubusercontent.com/yavonalabs/invariant/main/demo.svg)
+
 ---
 
 ## What Invariant Is (and Isn't)

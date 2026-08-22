@@ -1,0 +1,83 @@
+
+<svg width="900" height="520" viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .bg { fill: #0d1117; rx: 12px; }
+    .header { fill: #161b22; }
+    .dot-red { fill: #ff5f56; }
+    .dot-yellow { fill: #ffbd2e; }
+    .dot-green { fill: #27c93f; }
+    .title { fill: #8b949e; font-family: monospace; font-size: 14px; font-weight: bold; }
+    
+    .txt-cmd { fill: #58a6ff; font-family: monospace; font-size: 15px; font-weight: bold; }
+    .txt-bold { fill: #f0f6fc; font-family: monospace; font-size: 14px; font-weight: bold; }
+    .txt-dim { fill: #8b949e; font-family: monospace; font-size: 13px; }
+    .txt-green { fill: #3fb950; font-family: monospace; font-size: 14px; font-weight: bold; }
+    .txt-yellow { fill: #d29922; font-family: monospace; font-size: 14px; }
+    .txt-cyan { fill: #38bdf8; font-family: monospace; font-size: 14px; }
+
+    /* Keyframe Animations */
+    .step1 { animation: fadeIn 0.5s ease-in 0.5s forwards; opacity: 0; }
+    .step2 { animation: fadeIn 0.5s ease-in 1.2s forwards; opacity: 0; }
+    .step3 { animation: fadeIn 0.5s ease-in 1.9s forwards; opacity: 0; }
+    .step4 { animation: fadeIn 0.5s ease-in 2.6s forwards; opacity: 0; }
+    .step5 { animation: fadeIn 0.5s ease-in 3.3s forwards; opacity: 0; }
+    .summary { animation: fadeIn 0.5s ease-in 4.0s forwards; opacity: 0; }
+
+    @keyframes fadeIn {
+      to { opacity: 1; }
+    }
+  </style>
+
+  <!-- Terminal Frame -->
+  <rect width="900" height="520" class="bg" stroke="#30363d" stroke-width="2"/>
+  <path d="M 0 0 L 900 0 L 900 42 L 0 42 Z" class="header" rx="12"/>
+  <rect y="30" width="900" height="12" class="header"/>
+  
+  <!-- macOS Buttons -->
+  <circle cx="24" cy="21" r="6" class="dot-red"/>
+  <circle cx="44" cy="21" r="6" class="dot-yellow"/>
+  <circle cx="64" cy="21" r="6" class="dot-green"/>
+  <text x="450" y="26" class="title" text-anchor="middle">npx @yavona/invariant test stripe-webhooks</text>
+
+  <!-- Command Input -->
+  <text x="30" y="80" class="txt-cmd">$ npx @yavona/invariant test stripe-webhooks</text>
+
+  <!-- Step 1: Config Header -->
+  <g class="step1">
+    <text x="30" y="115" class="txt-dim">[Config] Target Webhook: http://localhost:3000/api/webhooks/stripe</text>
+    <text x="30" y="135" class="txt-dim">[Config] State Probe:   http://localhost:3000/api/db-state</text>
+    <text x="30" y="155" class="txt-dim">[Config] Provider: STRIPE | Timeout: 5000ms | Invariants: 4</text>
+    <line x1="30" y1="170" x2="870" y2="170" stroke="#30363d" stroke-width="1"/>
+  </g>
+
+  <!-- Step 2: Invariant 1 -->
+  <g class="step2">
+    <text x="30" y="200" class="txt-yellow">[INVARIANT 1/4] idempotency (duplicate_delivery)</text>
+    <text x="50" y="222" class="txt-green">✔ PASSED — HTTP 200 | DB State Verified (paymentCount: 1)</text>
+  </g>
+
+  <!-- Step 3: Invariant 2 -->
+  <g class="step3">
+    <text x="30" y="260" class="txt-yellow">[INVARIANT 2/4] security_signature (tampered_signature)</text>
+    <text x="50" y="282" class="txt-green">✔ PASSED — HTTP 401 | DB State Verified (Signature Rejected)</text>
+  </g>
+
+  <!-- Step 4: Invariant 3 -->
+  <g class="step4">
+    <text x="30" y="320" class="txt-yellow">[INVARIANT 3/4] lifecycle_ordering (out_of_order)</text>
+    <text x="50" y="342" class="txt-green">✔ PASSED — HTTP 200 | DB State Verified (Ledger Uncorrupted)</text>
+  </g>
+
+  <!-- Step 5: Invariant 4 -->
+  <g class="step5">
+    <text x="30" y="380" class="txt-yellow">[INVARIANT 4/4] server_error_resilience (server_error_resilience)</text>
+    <text x="50" y="402" class="txt-green">✔ PASSED — HTTP 500 | DB State Verified (Partial Write Rollback)</text>
+  </g>
+
+  <!-- Summary Banner -->
+  <g class="summary">
+    <line x1="30" y1="430" x2="870" y2="430" stroke="#30363d" stroke-width="1"/>
+    <rect x="30" y="445" width="840" height="50" rx="8" fill="#161b22" stroke="#238636" stroke-width="2"/>
+    <text x="450" y="476" class="txt-green" font-size="16" text-anchor="middle">🟢 STATUS: 4/4 INVARIANTS PASSED (115ms) — BUSINESS OUTCOME HEALTHY</text>
+  </g>
+</svg>
