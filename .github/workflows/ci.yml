@@ -1,4 +1,4 @@
-name: Business Correctness CI
+name: CI Suite
 
 on:
   push:
@@ -8,7 +8,6 @@ on:
 
 jobs:
   test:
-    name: Run Invariant Self-Test Suite
     runs-on: ubuntu-latest
 
     strategy:
@@ -23,11 +22,8 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
-      - name: Install dependencies
-        run: npm ci || npm install
-
-      - name: Check JavaScript Syntax
+      - name: Run Syntax Checks
         run: npm run syntax
 
-      - name: Run Invariant CLI Self-Test Suite
+      - name: Run CLI Self-Test Suite
         run: npm test --ci

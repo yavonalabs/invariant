@@ -84,8 +84,7 @@ module.exports = {
   }),
 
   /**
-   * Event: refund.processed
-   * Used for out-of-order lifecycle testing.
+   * Event: refund.processed (Full Refund)
    */
   generateRefundProcessed: (eventId, amount = 5000) => ({
     entity: "event",
@@ -106,5 +105,76 @@ module.exports = {
       }
     },
     created_at: Math.floor(Date.now() / 1000)
+  }),
+
+  /**
+   * Event: refund.processed (Partial / Boundary Exceeding Refund)
+   * Default: attempts to refund 8000 out of a 5000 charge.
+   */
+  generatePartialRefundProcessed: (eventId, totalAmount = 5000, refundAmount = 8000) => ({
+    entity: "event",
+    account_id: "acc_yavona_001",
+    event: "refund.processed",
+    event_id: normalizeId(eventId, "evt"),
+    contains: ["refund"],
+    payload: {
+      refund: {
+        entity: {
+          id: childId(eventId, "rfnd"),
+          entity: "refund",
+          amount: refundAmount,
+          currency: "INR",
+          payment_id: childId(eventId, "pay"),
+          status: "processed"
+        }
+      }
+    },
+    created_at: Math.floor(Date.now() / 1000)
+  }),
+
+  /**
+   * Event: subscription.cancelled
+   */
+  generateSubscriptionCancelled: (eventId) => ({
+    entity: "event",
+    account_id: "acc_yavona_001",
+    event: "subscription.cancelled",
+    event_id: normalizeId(eventId, "evt"),
+    contains: ["subscription"],
+    payload: {
+      subscription: {
+        entity: {
+          id: childId(eventId, "sub"),
+          entity: "subscription",
+          plan_id: "plan_premium_001",
+          status: "cancelled",
+          ended_at: Math.floor(Date.now() / 1000)
+        }
+      }
+    },
+    created_at: Math.floor(Date.now() / 1000)
+  }),
+
+  /**
+   * Legacy Razorpay Schema
+   */
+  generateLegacySchemaPayload: (eventId) => ({
+    entity: "event",
+    account_id: "acc_yavona_001",
+    event: "payment.authorized",
+    event_id: normalizeId(eventId, "evt"),
+    contains: ["payment"],
+    payload: {
+      payment: {
+        entity: {
+          id: childId(eventId, "pay"),
+          entity: "payment",
+          amount: 5000,
+          currency: "INR",
+          status: "authorized"
+        }
+      }
+    },
+    created_at: Math.floor(Date.now() / 1000) - 86400 * 30
   })
 };

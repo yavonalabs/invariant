@@ -77,6 +77,44 @@ module.exports = {
       expectHttp: [500],
       assertState: (state, httpRes, baseline) =>
         (state.paymentCount ?? 0) === (baseline.paymentCount ?? 0)
+    },
+    {
+      scenario: "concurrent_race_condition",
+      name: "queue_concurrency_lock",
+      description:
+        "Simultaneous webhook delivery burst must preserve exact single record under concurrency",
+      expectHttp: [200, 202],
+      assertState: (state, httpRes, baseline) =>
+        (state.paymentCount ?? 0) === ((baseline.paymentCount ?? 0) + 1)
+    },
+    {
+      scenario: "partial_refund_bounds",
+      name: "refund_bounds_check",
+      description:
+        "Refund amount exceeding captured payment must be rejected without corrupting ledger",
+      totalAmount: 5000,
+      refundAmount: 8000,
+      expectHttp: [400, 422],
+      assertState: (state, httpRes, baseline) =>
+        (state.refundedAmount ?? 0) <= (state.capturedAmount ?? 0)
+    },
+    {
+      scenario: "subscription_downgrade",
+      name: "tier_revocation",
+      description:
+        "Subscription cancellation event must revoke pro tier without orphaned active state",
+      expectHttp: [200, 202],
+      assertState: (state, httpRes, baseline) =>
+        state.userTier === "free" || state.subscriptionStatus === "canceled"
+    },
+    {
+      scenario: "schema_replay_tolerance",
+      name: "legacy_schema_safety",
+      description:
+        "Replaying legacy schema versions must not cause unhandled crashes or corrupt records",
+      expectHttp: [200, 202, 400],
+      assertState: (state, httpRes, baseline) =>
+        (state.corruptRecordsCount ?? 0) === 0
     }
   ]
 };

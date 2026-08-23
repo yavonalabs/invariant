@@ -1,7 +1,7 @@
 /**
  * Command Handler:
- * npx invariant test stripe-webhooks
- * npx invariant test payment
+ * npx @yavona/invariant test stripe-webhooks
+ * npx @yavona/invariant test payment
  *
  * Provider-Accurate State Assertion Runner
  */
@@ -19,6 +19,17 @@ const EXIT_INTEGRITY_FAIL = 1;
 const EXIT_CONFIG_ERROR = 2;
 
 const SUPPORTED_PROVIDERS = ["stripe", "razorpay"];
+const KNOWN_SCENARIOS = [
+  "duplicate_delivery",
+  "tampered_signature",
+  "out_of_order",
+  "server_error_resilience",
+  "concurrent_race_condition",
+  "partial_refund_bounds",
+  "subscription_downgrade",
+  "schema_replay_tolerance"
+];
+
 const POLL_INTERVAL_MS = 200;
 
 function sleep(ms) {
@@ -98,76 +109,65 @@ function sendHttpRequest(urlStr, method, payload = null, headers = {}, timeoutMs
         parsedUrl,
         {
           method,
-          headers: reqHeaders
+          headers: reqHeaders,
+          timeout: timeoutMs
         },
         (res) => {
-          let data = "";
+          let responseBody = "";
 
           res.on("data", (chunk) => {
-            data += chunk;
+            responseBody += chunk;
           });
 
           res.on("end", () => {
-            let parsed;
-            const trimmed = data ? data.trim() : "";
-
-            try {
-              parsed = JSON.parse(trimmed || "{}");
-            } catch {
-              parsed = trimmed;
-            }
-
             safeResolve({
               status: res.statusCode,
-              body: parsed,
-              raw: trimmed
+              headers: res.headers,
+              body: responseBody
             });
           });
         }
       );
 
-      req.setTimeout(timeoutMs, () => {
+      req.on("timeout", () => {
         req.destroy();
-        safeReject(new Error(`HTTP Request Timed Out after ${timeoutMs}ms (${urlStr})`));
+        safeReject(new Error(`HTTP request timed out after ${timeoutMs}ms`));
       });
 
       req.on("error", (err) => {
-        safeReject(new Error(`HTTP Request Failed (${urlStr}): ${err.message}`));
+        safeReject(new Error(`HTTP request failed: ${err.message}`));
       });
 
-      if (
-        payload !== null &&
-        payload !== undefined &&
-        method !== "GET" &&
-        method !== "HEAD"
-      ) {
+      if (bodyStr) {
         req.write(bodyStr);
       }
 
       req.end();
     } catch (err) {
-      safeReject(new Error(`Invalid URL (${urlStr}): ${err.message}`));
+      safeReject(err);
     }
   });
 }
 
 function loadConfig() {
-  const configPath = path.resolve(process.cwd(), "invariant.config.js");
+  const cwd = process.cwd();
+  const configPath = path.resolve(cwd, "invariant.config.js");
 
   if (!fs.existsSync(configPath)) {
+    console.error(`\n❌ ${fmt.red("CONFIG ERROR")}: invariant.config.js not found in ${cwd}`);
     console.error(
-      `\n❌ ${fmt.red("CONFIG ERROR")}: Missing ${fmt.bold("invariant.config.js")} in directory ${process.cwd()}`
+      `Run ${fmt.cyan("npx @yavona/invariant init")} to scaffold your configuration.\n`
     );
-    console.error(`Run ${fmt.bold("npx invariant init")} to generate a template config.\n`);
     process.exit(EXIT_CONFIG_ERROR);
   }
 
   try {
     delete require.cache[require.resolve(configPath)];
-    return require(configPath);
+    const config = require(configPath);
+    return config;
   } catch (err) {
     console.error(
-      `\n❌ ${fmt.red("CONFIG ERROR")}: Failed to load ${fmt.bold("invariant.config.js")}: ${err.message}\n`
+      `\n❌ ${fmt.red("CONFIG ERROR")}: Failed to load invariant.config.js — ${err.message}\n`
     );
     process.exit(EXIT_CONFIG_ERROR);
   }
@@ -176,27 +176,18 @@ function loadConfig() {
 async function fetchProbeState(probeUrl, timeoutMs) {
   const res = await sendHttpRequest(probeUrl, "GET", null, {}, timeoutMs);
 
-  if (res.status < 200 || res.status >= 300) {
-    throw new Error(`State Probe Endpoint at ${probeUrl} returned HTTP ${res.status}`);
+  if (res.status !== 200) {
+    throw new Error(`Probe Endpoint returned HTTP ${res.status} (Expected 200)`);
   }
 
-  if (
-    typeof res.body !== "object" ||
-    res.body === null ||
-    Array.isArray(res.body) ||
-    res.raw === ""
-  ) {
-    throw new Error(
-      `State Probe Endpoint at ${probeUrl} returned non-JSON object payload (Received: '${res.raw || "0 bytes"}')`
-    );
+  try {
+    return JSON.parse(res.body);
+  } catch (err) {
+    throw new Error(`Probe Endpoint returned non-JSON payload: ${err.message}`);
   }
-
-  return res.body;
 }
 
 async function executeStateReset(resetUrl, timeoutMs) {
-  if (!resetUrl) return;
-
   let res;
 
   try {
@@ -339,6 +330,24 @@ async function handleTest(subcommand) {
     console.log(`Description: ${fmt.dim(inv.description || "")}`);
     console.log(`------------------------------------------------------------`);
 
+    // Strict Scenario Validation: Fail loudly on unknown scenario without custom payload
+    const isKnownScenario = KNOWN_SCENARIOS.includes(scenario);
+    const hasCustomPayload = inv.payload !== undefined || typeof inv.generatePayload === "function";
+
+    if (!isKnownScenario && !hasCustomPayload) {
+      failuresCount++;
+      console.log(
+        `❌ RESULT: ${fmt.badgeFail()} — ${fmt.red("Configuration Error:")} Unknown scenario '${scenario}'.`
+      );
+      console.log(
+        `   Supported built-in scenarios: ${KNOWN_SCENARIOS.map((s) => fmt.cyan(s)).join(", ")}`
+      );
+      console.log(
+        `   Or supply a custom payload via 'payload' / 'generatePayload' in invariant.config.js.`
+      );
+      continue;
+    }
+
     if (typeof inv.assertState !== "function" && typeof inv.assert !== "function") {
       console.log(`   ${fmt.yellow("⚠ No assertState/assert defined — invariant will auto-pass.")}`);
     }
@@ -372,11 +381,32 @@ async function handleTest(subcommand) {
 
     let payloadObj;
 
-    if (scenario === "out_of_order") {
+    if (hasCustomPayload) {
+      payloadObj = typeof inv.generatePayload === "function"
+        ? inv.generatePayload(eventId, baselineState)
+        : inv.payload;
+    } else if (scenario === "out_of_order") {
       payloadObj =
         providerName === "stripe"
           ? stripe.generateChargeRefunded(eventId, 5000)
           : razorpay.generateRefundProcessed(eventId, 5000);
+    } else if (scenario === "partial_refund_bounds") {
+      const totalAmount = Number(inv.totalAmount || 5000);
+      const refundAmount = Number(inv.refundAmount || 8000);
+      payloadObj =
+        providerName === "stripe"
+          ? stripe.generatePartialRefund(eventId, totalAmount, refundAmount)
+          : razorpay.generatePartialRefundProcessed(eventId, totalAmount, refundAmount);
+    } else if (scenario === "subscription_downgrade") {
+      payloadObj =
+        providerName === "stripe"
+          ? stripe.generateCustomerSubscriptionDeleted(eventId)
+          : razorpay.generateSubscriptionCancelled(eventId);
+    } else if (scenario === "schema_replay_tolerance") {
+      payloadObj =
+        providerName === "stripe"
+          ? stripe.generateLegacySchemaPayload(eventId)
+          : razorpay.generateLegacySchemaPayload(eventId);
     } else {
       payloadObj =
         providerName === "stripe"
@@ -403,19 +433,35 @@ async function handleTest(subcommand) {
     }
 
     try {
-      const httpRes = await sendHttpRequest(
-        config.targetUrl,
-        "POST",
-        payloadStr,
-        headers,
-        httpTimeoutMs
-      );
-
+      let httpRes;
       let duplicateRes = null;
 
-      if (scenario === "duplicate_delivery") {
+      if (scenario === "concurrent_race_condition") {
+        console.log(` ↳ Dispatching simultaneous concurrent burst (ID: ${eventId})...`);
+        const [resA, resB] = await Promise.all([
+          sendHttpRequest(config.targetUrl, "POST", payloadStr, headers, httpTimeoutMs),
+          sendHttpRequest(config.targetUrl, "POST", payloadStr, headers, httpTimeoutMs)
+        ]);
+        httpRes = resA;
+        duplicateRes = resB;
+      } else if (scenario === "duplicate_delivery") {
+        httpRes = await sendHttpRequest(
+          config.targetUrl,
+          "POST",
+          payloadStr,
+          headers,
+          httpTimeoutMs
+        );
         console.log(` ↳ Dispatching duplicate webhook payload (ID: ${eventId})...`);
         duplicateRes = await sendHttpRequest(
+          config.targetUrl,
+          "POST",
+          payloadStr,
+          headers,
+          httpTimeoutMs
+        );
+      } else {
+        httpRes = await sendHttpRequest(
           config.targetUrl,
           "POST",
           payloadStr,
@@ -501,33 +547,31 @@ async function handleTest(subcommand) {
   const durationMs = Date.now() - startTime;
 
   console.log(`\n============================================================`);
-  console.log(
-    `SUMMARY: ${config.invariants.length - failuresCount}/${config.invariants.length} Invariants Passed (${durationMs}ms)`
-  );
-
-  if (signatureFailuresCount >= 2) {
-    console.log(
-      `\n${fmt.yellow("💡 DIAGNOSTIC HINT:")} Multiple invariants failed with signature errors (HTTP 400/401).`
-    );
-    console.log(
-      `   This usually indicates global body-parsing middleware (e.g. express.json()) parsed the request before your webhook handler.`
-    );
-    console.log(
-      `   Ensure your webhook endpoint uses raw body parsing (e.g. express.raw({ type: 'application/json' })).\n`
-    );
-  }
+  console.log(` SUMMARY: ${config.invariants.length - failuresCount}/${config.invariants.length} Invariants Passed (${durationMs}ms)`);
 
   if (failuresCount === 0) {
-    console.log(`STATUS: ${fmt.green("🟢 BUSINESS OUTCOME HEALTHY")} — All invariants hold true.`);
+    console.log(` STATUS: 🟢 ${fmt.green("BUSINESS OUTCOME HEALTHY")} — All invariants hold true.`);
     console.log(`============================================================\n`);
     process.exit(EXIT_SUCCESS);
-  } else {
-    console.log(
-      `STATUS: ${fmt.red("🔴 BUSINESS INTEGRITY FAILURE DETECTED!")} (${failuresCount} Violations)`
-    );
-    console.log(`============================================================\n`);
-    process.exit(EXIT_INTEGRITY_FAIL);
   }
+
+  console.log(` STATUS: 🔴 ${fmt.red("BUSINESS INTEGRITY FAILURE DETECTED")}`);
+  console.log(`============================================================\n`);
+
+  if (signatureFailuresCount > 0) {
+    console.log(`${fmt.yellow("⚠️ SIGNATURE MISMATCH / 401 ERROR:")}`);
+    console.log(
+      `1. Check secret match: Ensure your backend and invariant.config.js use the identical webhook secret.`
+    );
+    console.log(
+      `2. Check raw body: If using Express, global app.use(express.json()) corrupts HMAC validation.`
+    );
+    console.log(
+      `   Use ${fmt.cyan("express.raw({ type: 'application/json' })")} specifically on webhook routes.\n`
+    );
+  }
+
+  process.exit(EXIT_INTEGRITY_FAIL);
 }
 
 module.exports = { handleTest };

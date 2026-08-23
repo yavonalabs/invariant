@@ -4,9 +4,12 @@
  * This simulates a payment webhook consumer with:
  * - signature verification
  * - idempotent payment recording
- * - state probe endpoint
- * - state reset endpoint
- * - forced server failure support
+ * - state probe endpoint (/api/db-state)
+ * - state reset endpoint (/api/reset-state)
+ * - forced server failure injection support
+ * - refund bounds validation
+ * - subscription tier lifecycle updates
+ * - legacy schema replay tolerance
  */
 
 const http = require("http");
@@ -21,13 +24,25 @@ const SECRET =
 
 let state = {
   paymentCount: 0,
-  payments: []
+  ledgerBalance: 0,
+  payments: [],
+  userTier: "free",
+  subscriptionStatus: "active",
+  refundedAmount: 0,
+  capturedAmount: 5000,
+  corruptRecordsCount: 0
 };
 
 function resetState() {
   state = {
     paymentCount: 0,
-    payments: []
+    ledgerBalance: 0,
+    payments: [],
+    userTier: "free",
+    subscriptionStatus: "active",
+    refundedAmount: 0,
+    capturedAmount: 5000,
+    corruptRecordsCount: 0
   };
 }
 
@@ -128,12 +143,14 @@ function upsertPayment(id, amount, provider) {
     });
 
     state.paymentCount = state.payments.length;
+    state.ledgerBalance += amount || 5000;
   }
 }
 
 function handleStripeEvent(event) {
   const dataObject = event?.data?.object || {};
 
+  // 1. Failure Injection Scenario
   if (dataObject?.metadata?.invariant_test === "trigger_db_failure") {
     return {
       status: 500,
@@ -143,6 +160,59 @@ function handleStripeEvent(event) {
     };
   }
 
+  // 2. Partial Refund Bounds Scenario (Refund 8000 on 5000 captured)
+  if (event.type === "charge.refunded") {
+    const refundAmount = dataObject.amount_refunded || dataObject.amount || 0;
+    const totalCaptured = dataObject.amount || state.capturedAmount || 5000;
+
+    if (refundAmount > totalCaptured) {
+      return {
+        status: 422,
+        body: {
+          error: "Refund amount exceeds total captured payment"
+        }
+      };
+    }
+
+    state.refundedAmount += refundAmount;
+    return {
+      status: 200,
+      body: {
+        received: true,
+        refundedAmount: state.refundedAmount
+      }
+    };
+  }
+
+  // 3. Subscription Downgrade Scenario
+  if (event.type === "customer.subscription.deleted") {
+    state.userTier = "free";
+    state.subscriptionStatus = "canceled";
+    return {
+      status: 200,
+      body: {
+        received: true,
+        status: "canceled",
+        userTier: "free"
+      }
+    };
+  }
+
+  // 4. Schema Replay Tolerance Scenario (Legacy 2019 API version)
+  if (event.api_version === "2019-12-03") {
+    const chargeId = dataObject.id || "ch_legacy_default";
+    const amount = dataObject.amount || 5000;
+    upsertPayment(chargeId, amount, "stripe_legacy");
+    return {
+      status: 200,
+      body: {
+        received: true,
+        legacy_schema: true
+      }
+    };
+  }
+
+  // 5. Payment Intent Succeeded (Idempotent Payment Recording)
   if (event.type === "payment_intent.succeeded") {
     upsertPayment(dataObject.id, dataObject.amount, "stripe");
 
@@ -150,18 +220,6 @@ function handleStripeEvent(event) {
       status: 200,
       body: {
         received: true
-      }
-    };
-  }
-
-  if (event.type === "charge.refunded") {
-    // Out-of-order refunds should not create payment records.
-    return {
-      status: 200,
-      body: {
-        received: true,
-        ignored: true,
-        reason: "refund_without_existing_payment"
       }
     };
   }
@@ -178,6 +236,7 @@ function handleRazorpayEvent(event) {
   const paymentEntity = event?.payload?.payment?.entity || {};
   const refundEntity = event?.payload?.refund?.entity || {};
 
+  // 1. Failure Injection Scenario
   if (paymentEntity?.notes?.invariant_test === "trigger_db_failure") {
     return {
       status: 500,
@@ -187,6 +246,45 @@ function handleRazorpayEvent(event) {
     };
   }
 
+  // 2. Refund Bounds Scenario
+  if (event.event === "refund.processed") {
+    const refundAmount = refundEntity.amount || 0;
+    const totalCaptured = state.capturedAmount || 5000;
+
+    if (refundAmount > totalCaptured) {
+      return {
+        status: 422,
+        body: {
+          error: "Refund amount exceeds total captured payment"
+        }
+      };
+    }
+
+    state.refundedAmount += refundAmount;
+    return {
+      status: 200,
+      body: {
+        received: true,
+        refundedAmount: state.refundedAmount
+      }
+    };
+  }
+
+  // 3. Subscription Downgrade Scenario
+  if (event.event === "subscription.cancelled") {
+    state.userTier = "free";
+    state.subscriptionStatus = "canceled";
+    return {
+      status: 200,
+      body: {
+        received: true,
+        status: "cancelled",
+        userTier: "free"
+      }
+    };
+  }
+
+  // 4. Payment Captured
   if (event.event === "payment.captured") {
     upsertPayment(paymentEntity.id, paymentEntity.amount, "razorpay");
 
@@ -194,18 +292,6 @@ function handleRazorpayEvent(event) {
       status: 200,
       body: {
         received: true
-      }
-    };
-  }
-
-  if (event.event === "refund.processed") {
-    // Out-of-order refunds should not create payment records.
-    return {
-      status: 200,
-      body: {
-        received: true,
-        ignored: true,
-        reason: "refund_without_existing_payment"
       }
     };
   }
@@ -259,66 +345,65 @@ const server = http.createServer(async (req, res) => {
       const stripeSignature = req.headers["stripe-signature"];
       const razorpaySignature = req.headers["x-razorpay-signature"];
 
+      let provider = "unknown";
+      let isValid = false;
+
       if (stripeSignature) {
-        if (!verifyStripeSignature(rawBody, stripeSignature)) {
-          return sendJson(res, 401, {
-            error: "Invalid Stripe signature"
-          });
-        }
-
-        let event;
-
-        try {
-          event = JSON.parse(rawBody || "{}");
-        } catch {
-          return sendJson(res, 400, {
-            error: "Invalid JSON payload"
-          });
-        }
-
-        const result = handleStripeEvent(event);
-        return sendJson(res, result.status, result.body);
+        provider = "stripe";
+        isValid = verifyStripeSignature(rawBody, stripeSignature);
+      } else if (razorpaySignature) {
+        provider = "razorpay";
+        isValid = verifyRazorpaySignature(rawBody, razorpaySignature);
       }
 
-      if (razorpaySignature) {
-        if (!verifyRazorpaySignature(rawBody, razorpaySignature)) {
-          return sendJson(res, 401, {
-            error: "Invalid Razorpay signature"
-          });
-        }
-
-        let event;
-
-        try {
-          event = JSON.parse(rawBody || "{}");
-        } catch {
-          return sendJson(res, 400, {
-            error: "Invalid JSON payload"
-          });
-        }
-
-        const result = handleRazorpayEvent(event);
-        return sendJson(res, result.status, result.body);
+      if (!isValid) {
+        return sendJson(res, 401, {
+          error: "Invalid or missing webhook signature"
+        });
       }
 
-      return sendJson(res, 400, {
-        error: "Missing webhook signature header"
-      });
+      let parsedPayload = {};
+
+      try {
+        parsedPayload = JSON.parse(rawBody || "{}");
+      } catch {
+        return sendJson(res, 400, {
+          error: "Invalid JSON payload"
+        });
+      }
+
+      let eventResult;
+
+      if (provider === "stripe") {
+        eventResult = handleStripeEvent(parsedPayload);
+      } else if (provider === "razorpay") {
+        eventResult = handleRazorpayEvent(parsedPayload);
+      } else {
+        return sendJson(res, 400, {
+          error: "Unsupported provider"
+        });
+      }
+
+      return sendJson(res, eventResult.status, eventResult.body);
     }
 
     return sendJson(res, 404, {
       error: "Not found"
     });
-  } catch (err) {
+  } catch (error) {
     return sendJson(res, 500, {
-      error: err.message
+      error: error.message || "Internal server error"
     });
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`\nInvariant mock backend listening on http://localhost:${PORT}`);
-  console.log(`Webhook endpoint: http://localhost:${PORT}/api/webhook`);
-  console.log(`DB probe endpoint: http://localhost:${PORT}/api/db-state`);
-  console.log(`Reset endpoint: http://localhost:${PORT}/api/reset-state\n`);
-});
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`[Mock Backend] Running on http://localhost:${PORT}`);
+    console.log(`[Mock Backend] Webhook: http://localhost:${PORT}/api/webhook`);
+    console.log(`[Mock Backend] DB Probe: http://localhost:${PORT}/api/db-state`);
+    console.log(`[Mock Backend] Reset:    http://localhost:${PORT}/api/reset-state`);
+  });
+}
+
+module.exports = { server, resetState, state };

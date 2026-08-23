@@ -1,7 +1,7 @@
 # Invariant (`@yavona/invariant`)
 
-> **The Business Invariant Layer for Software.**  
-> Continuously prove your Stripe & Razorpay webhook implementations satisfy database state post-conditions in under 10 seconds.
+> **The Business Invariant Engine for Software.**  
+> Continuously prove Stripe & Razorpay payment webhook implementations satisfy database state post-conditions across async queue workers (BullMQ, Temporal, Celery, Sidekiq) in under 10 seconds.
 
 [![GitHub Actions CI](https://github.com/yavonalabs/invariant/actions/workflows/ci.yml/badge.svg)](https://github.com/yavonalabs/invariant/actions)
 [![NPM Version](https://img.shields.io/npm/v/@yavona/invariant.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/@yavona/invariant)
@@ -19,13 +19,28 @@
 
 `stripe trigger` dispatches webhooks to your application with zero verification of what happens inside your database.
 
-**Invariant is a Business Invariant Assertion Engine.** It queries your application's state probe endpoint (`/api/db-state`) to mathematically prove that your backend state mutations satisfied business post-conditions—even across async Redis/BullMQ queue workers.
+**Invariant is a Business Invariant Assertion Engine.** It packages a pre-built library of **8+ battle-tested payment gateway edge cases** out of the box and queries your application's state probe endpoint (`/api/db-state`) to mathematically prove that your backend state mutations satisfied business post-conditions—even across async queue workers (BullMQ, Temporal, Celery, Sidekiq).
 
 ```
 Datadog / Sentry    ---> "Is the application throwing runtime exceptions?"
 Stripe CLI trigger  ---> "Did the webhook HTTP request get sent?"
 INVARIANT           ---> "Did the database mutation satisfy business post-conditions?"
 ```
+
+---
+
+## 🛡️ Built-in 8+ Battle-Tested Scenario Suite
+
+| Scenario | Invariant Checked | Expected Business Post-Condition |
+| :--- | :--- | :--- |
+| **`duplicate_delivery`** | Idempotency Lock | Duplicate retries preserve single payment row (`paymentCount == baseline + 1`) |
+| **`tampered_signature`** | HMAC Security | Invalid signatures rejected HTTP 401 without mutating DB state |
+| **`out_of_order`** | Lifecycle Ordering | Refund arriving before payment must not corrupt state ledger |
+| **`server_error_resilience`** | 500 Failure Rollback | Server 500 crashes must roll back completely without partial DB writes |
+| **`concurrent_race_condition`** | Background Queue Lock | Burst of simultaneous webhooks must preserve exact single DB balance |
+| **`partial_refund_bounds`** | Ledger Integrity | Refunded amount must never exceed total captured payment amount |
+| **`subscription_downgrade`** | State Transition | Canceled subscription updates must preserve correct user tier |
+| **`schema_replay_tolerance`** | Migration Safety | Legacy payload versions replayed after migration must handle safely |
 
 ---
 

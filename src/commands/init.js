@@ -40,7 +40,7 @@ module.exports = {
   webhookSecret:
     process.env.INVARIANT_WEBHOOK_SECRET ||
     process.env.WEBHOOK_SECRET ||
-    "whsec_stripe_secret_12345",
+    "whsec_yavona_secret_12345",
 
   // HTTP Request Timeout in milliseconds
   httpTimeoutMs: Number(process.env.INVARIANT_HTTP_TIMEOUT_MS || 5000),
@@ -48,8 +48,11 @@ module.exports = {
   // DB Assertion Eventual Consistency Polling Timeout in milliseconds
   assertionTimeoutMs: Number(process.env.INVARIANT_ASSERTION_TIMEOUT_MS || 5000),
 
-  // Explicit Scenario Invariant Specifications
+  // Invariant Specifications
   invariants: [
+    // -------------------------------------------------------------------------
+    // CORE PAYMENT INVARIANTS (Active by default — requires paymentCount / ledger)
+    // -------------------------------------------------------------------------
     {
       scenario: "duplicate_delivery",
       name: "idempotency",
@@ -87,6 +90,51 @@ module.exports = {
       assertState: (state, httpRes, baseline) =>
         (state.paymentCount ?? 0) === (baseline.paymentCount ?? 0)
     }
+
+    // -------------------------------------------------------------------------
+    // ADVANCED INVARIANTS (Uncomment when you have configured these probe fields)
+    // -------------------------------------------------------------------------
+    /*
+    ,
+    {
+      scenario: "concurrent_race_condition",
+      name: "queue_concurrency_lock",
+      description:
+        "Simultaneous webhook delivery burst must preserve exact single record under concurrency",
+      expectHttp: [200, 202],
+      assertState: (state, httpRes, baseline) =>
+        (state.paymentCount ?? 0) === ((baseline.paymentCount ?? 0) + 1)
+    },
+    {
+      scenario: "partial_refund_bounds",
+      name: "refund_bounds_check",
+      description:
+        "Refund amount exceeding captured payment must be rejected without corrupting ledger",
+      totalAmount: 5000,
+      refundAmount: 8000,
+      expectHttp: [400, 422],
+      assertState: (state, httpRes, baseline) =>
+        (state.refundedAmount ?? 0) <= (state.capturedAmount ?? 0)
+    },
+    {
+      scenario: "subscription_downgrade",
+      name: "tier_revocation",
+      description:
+        "Subscription cancellation event must revoke pro tier without orphaned active state",
+      expectHttp: [200, 202],
+      assertState: (state, httpRes, baseline) =>
+        state.userTier === "free" || state.subscriptionStatus === "canceled"
+    },
+    {
+      scenario: "schema_replay_tolerance",
+      name: "legacy_schema_safety",
+      description:
+        "Replaying legacy schema versions must not cause unhandled crashes or corrupt records",
+      expectHttp: [200, 202, 400],
+      assertState: (state, httpRes, baseline) =>
+        (state.corruptRecordsCount ?? 0) === 0
+    }
+    */
   ]
 };
 `;
