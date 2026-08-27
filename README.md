@@ -5,6 +5,7 @@
 
 [![GitHub Actions CI](https://github.com/yavonalabs/invariant/actions/workflows/ci.yml/badge.svg)](https://github.com/yavonalabs/invariant/actions)
 [![NPM Version](https://img.shields.io/npm/v/@yavona/invariant.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/@yavona/invariant)
+[![GitHub Stars](https://img.shields.io/github/stars/yavonalabs/invariant?style=flat-square&color=yellow)](https://github.com/yavonalabs/invariant/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
 [![Website](https://img.shields.io/badge/website-yavonalabs.com-cyan.svg?style=flat-square)](https://yavonalabs.com)
@@ -196,6 +197,12 @@ jobs:
       - run: npm ci
       - run: npm test --ci
 ```
+
+---
+
+## ⭐ Support the Project
+
+If `@yavona/invariant` helped you test your Stripe or Razorpay webhook integration and catch edge cases in local dev, please consider **[giving the repository a Star on GitHub](https://github.com/yavonalabs/invariant)** ⭐ — it helps other backend engineers discover the project and supports ongoing development!
 
 ---
 
