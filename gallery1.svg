@@ -1,0 +1,80 @@
+<svg width="1200" height="675" viewBox="0 0 1200 675" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#090d16" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="cardBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#111827" />
+      <stop offset="100%" stop-color="#0b0f19" />
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="675" fill="url(#bg)"/>
+
+  <!-- Main Terminal Card -->
+  <rect x="40" y="30" width="1120" height="615" rx="16" fill="url(#cardBg)" stroke="#1e293b" stroke-width="2" filter="url(#shadow)"/>
+
+  <!-- Window Header Bar -->
+  <rect x="40" y="30" width="1120" height="48" rx="16" fill="#1e293b" />
+  <rect x="40" y="62" width="1120" height="16" fill="#1e293b" />
+  <circle cx="70" cy="54" r="6" fill="#ef4444"/>
+  <circle cx="92" cy="54" r="6" fill="#f59e0b"/>
+  <circle cx="114" cy="54" r="6" fill="#10b981"/>
+  <text x="600" y="59" font-family="'JetBrains Mono', 'Fira Code', monospace" font-size="14" fill="#94a3b8" text-anchor="middle">Invariant CLI v0.1.0-alpha.5 — 8/8 Business Invariants</text>
+
+  <!-- Header Content -->
+  <text x="70" y="115" font-family="'JetBrains Mono', monospace" font-size="22" font-weight="bold" fill="#10b981">Invariant CLI v0.1.0-alpha.5 — Business Layer</text>
+  <text x="70" y="145" font-family="'JetBrains Mono', monospace" font-size="15" fill="#64748b">Website: https://yavonalabs.com  •  Provider: STRIPE / RAZORPAY  •  Invariants: 8</text>
+  
+  <line x1="70" y1="165" x2="1130" y2="165" stroke="#334155" stroke-width="1.5"/>
+
+  <!-- Left Column (Scenarios 1 - 4) -->
+  <!-- Scenario 1 -->
+  <text x="70" y="200" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="bold" fill="#38bdf8">[1/8] idempotency (duplicate_delivery)</text>
+  <text x="70" y="222" font-family="'JetBrains Mono', monospace" font-size="14" fill="#10b981">✔ PASSED — HTTP 200 | DB State Verified (Single Row)</text>
+
+  <!-- Scenario 2 -->
+  <text x="70" y="270" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="bold" fill="#38bdf8">[2/8] security_signature (tampered_signature)</text>
+  <text x="70" y="292" font-family="'JetBrains Mono', monospace" font-size="14" fill="#10b981">✔ PASSED — HTTP 401 | DB State Verified (Rejected)</text>
+
+  <!-- Scenario 3 -->
+  <text x="70" y="340" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="bold" fill="#38bdf8">[3/8] lifecycle_ordering (out_of_order)</text>
+  <text x="70" y="362" font-family="'JetBrains Mono', monospace" font-size="14" fill="#10b981">✔ PASSED — HTTP 200 | DB State Verified (Uncorrupted)</text>
+
+  <!-- Scenario 4 -->
+  <text x="70" y="410" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="bold" fill="#38bdf8">[4/8] server_error_resilience (500 failure)</text>
+  <text x="70" y="432" font-family="'JetBrains Mono', monospace" font-size="14" fill="#10b981">✔ PASSED — HTTP 500 | DB State Verified (Rolled Back)</text>
+
+  <!-- Divider Line Between Columns -->
+  <line x1="585" y1="180" x2="585" y2="470" stroke="#1e293b" stroke-width="1.5" stroke-dasharray="4"/>
+
+  <!-- Right Column (Scenarios 5 - 8) -->
+  <!-- Scenario 5 -->
+  <text x="615" y="200" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="bold" fill="#38bdf8">[5/8] queue_concurrency (concurrent_burst)</text>
+  <text x="615" y="222" font-family="'JetBrains Mono', monospace" font-size="14" fill="#10b981">✔ PASSED — HTTP 200 | DB State Verified (Lock Held)</text>
+
+  <!-- Scenario 6 -->
+  <text x="615" y="270" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="bold" fill="#38bdf8">[6/8] refund_bounds (partial_refund_bounds)</text>
+  <text x="615" y="292" font-family="'JetBrains Mono', monospace" font-size="14" fill="#10b981">✔ PASSED — HTTP 422 | DB State Verified (Enforced)</text>
+
+  <!-- Scenario 7 -->
+  <text x="615" y="340" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="bold" fill="#38bdf8">[7/8] tier_revocation (subscription_downgrade)</text>
+  <text x="615" y="362" font-family="'JetBrains Mono', monospace" font-size="14" fill="#10b981">✔ PASSED — HTTP 200 | DB State Verified (Revoked)</text>
+
+  <!-- Scenario 8 -->
+  <text x="615" y="410" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="bold" fill="#38bdf8">[8/8] legacy_schema (schema_replay_tolerance)</text>
+  <text x="615" y="432" font-family="'JetBrains Mono', monospace" font-size="14" fill="#10b981">✔ PASSED — HTTP 200 | DB State Verified (Safe Replay)</text>
+
+  <!-- Summary Banner Box -->
+  <rect x="70" y="495" width="1060" height="110" rx="10" fill="#064e3b" fill-opacity="0.25" stroke="#059669" stroke-width="1.5"/>
+  <text x="100" y="538" font-family="'JetBrains Mono', monospace" font-size="18" font-weight="bold" fill="#34d399">SUMMARY: 8/8 Invariants Passed (160ms)</text>
+  <text x="100" y="575" font-family="'JetBrains Mono', monospace" font-size="16" font-weight="bold" fill="#10b981">STATUS: 🟢 BUSINESS OUTCOME HEALTHY — All invariants hold true.</text>
+  
+  <rect x="920" y="525" width="180" height="50" rx="8" fill="#10b981" />
+  <text x="1010" y="556" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="bold" fill="#0f172a" text-anchor="middle">8/8 PASSED ⚡</text>
+</svg>

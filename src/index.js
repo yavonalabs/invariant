@@ -10,6 +10,7 @@
 const fmt = require("./utils/formatter");
 const { handleInit } = require("./commands/init");
 const { handleTest } = require("./commands/test");
+const { handleDemo } = require("./commands/demo");
 
 const args = process.argv.slice(2);
 
@@ -24,6 +25,7 @@ ${fmt.bold("USAGE:")}
 $ npx @yavona/invariant <command> [subcommand] [options]
 
 ${fmt.bold("COMMANDS:")}
+${fmt.cyan("demo")}                    Run the zero-dependency theatrical business invariant demo
 ${fmt.cyan("init")}                    Generate template invariant.config.js in project
 ${fmt.cyan("test stripe-webhooks")}    Execute provider-accurate Stripe webhook state assertions
 ${fmt.cyan("test razorpay-webhooks")}  Execute provider-accurate Razorpay webhook state assertions
@@ -32,6 +34,7 @@ ${fmt.cyan("version / --version")}       Print Invariant CLI version
 ${fmt.cyan("help    / --help")}          Print CLI usage & help options
 
 ${fmt.bold("EXAMPLES:")}
+$ npx @yavona/invariant demo
 $ npx @yavona/invariant init
 $ npx @yavona/invariant test stripe-webhooks
 $ INVARIANT_WEBHOOK_SECRET=whsec_xyz npx @yavona/invariant test stripe-webhooks
@@ -43,6 +46,10 @@ https://yavonalabs.com
 
 async function main() {
   switch (command) {
+    case "demo":
+      await handleDemo();
+      break;
+
     case "init":
       await handleInit();
       break;

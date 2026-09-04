@@ -14,6 +14,16 @@
 
 ---
 
+## 🚀 The 60-Second Payment Vulnerability Demo
+
+Run this completely self-contained demo in your terminal. It spins up a transient mock payment server and blasts it with 20 concurrent webhooks to demonstrate a critical race condition. **Zero dependencies. No Docker. No DB.**
+
+```bash
+npx @yavona/invariant demo
+```
+
+---
+
 ## What Invariant Is (and Isn't)
 
 **Invariant is NOT a simple HTTP event trigger tool like `stripe trigger`.**
