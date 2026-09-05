@@ -1,6 +1,6 @@
 {
   "name": "@yavona/invariant",
-  "version": "0.2.0-alpha.1",
+  "version": "0.2.0-alpha.2",
   "description": "Invariant — The Business Invariant Layer for Software. Prove payment webhooks, state mutations, and business invariants locally.",
   "main": "src/index.js",
   "bin": {
