@@ -28,7 +28,7 @@ async function handleDemo() {
     const currentBalance = balance;
     // The delay that guarantees the race condition since we fire all 20 at once
     await wait(100);
-    balance = currentBalance + 100;
+    balance = currentBalance + 5000;
     txCount++;
     res.writeHead(200);
     res.end('OK');
@@ -67,20 +67,23 @@ async function handleDemo() {
 
   // Cool progress bar update
   const barWidth = 30;
+  const readline = require('readline');
   
   // We'll just loop and update the progress bar until all are complete
   while (completed < total) {
     const filled = Math.floor((completed / total) * barWidth);
     const empty = barWidth - filled;
     const bar = "█".repeat(filled) + "▒".repeat(empty);
-    process.stdout.write(`\r  ${fmt.cyan(bar)} ${completed}/${total}`);
+    readline.cursorTo(process.stdout, 0);
+    process.stdout.write(`  ${fmt.cyan(bar)} ${completed}/${total}`);
     await wait(20); // fast update
   }
   
   await Promise.all(reqPromises); // ensure they are all done
   
   // Finish bar
-  process.stdout.write(`\r  ${fmt.cyan("█".repeat(barWidth))} 20/20\n\n`);
+  readline.cursorTo(process.stdout, 0);
+  process.stdout.write(`  ${fmt.cyan("█".repeat(barWidth))} 20/20\n\n`);
 
   server.close();
 
@@ -88,7 +91,7 @@ async function handleDemo() {
   console.log(`  Analyzing business state...\n`);
   await wait(1000);
 
-  const expectedBalance = 20 * 100;
+  const expectedBalance = 20 * 5000;
   const actualBalance = balance; // Should be just 100 due to race condition
 
   const boxLine = "─".repeat(56);
