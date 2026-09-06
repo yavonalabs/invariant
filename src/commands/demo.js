@@ -105,7 +105,7 @@ async function handleDemo() {
   console.log(`  ${fmt.red("[FAIL]")} 4. Concurrent Processing (Race conditions)`);
   console.log(`         -> Expected Balance: $${(expectedBalance).toFixed(2)}`);
   console.log(`         -> Actual Balance:   $${(actualBalance).toFixed(2)}`);
-  console.log(`         -> ${fmt.red(`${total - 1} payments processed successfully but balance lost.`)}\n`);
+  console.log(`         -> ${fmt.red(`All 20 webhooks returned HTTP 200, but 19 ledger updates were silently overwritten.`)}\n`);
 
   await wait(500);
   console.log(`  ${fmt.bold("Your application could lose money under concurrent load.")}`);
