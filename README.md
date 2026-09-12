@@ -1,7 +1,7 @@
 # Invariant (`@yavona/invariant`)
 
-> **The Business Invariant Engine for Software.**  
-> Continuously prove Stripe & Razorpay payment webhook implementations satisfy database state post-conditions across async queue workers (BullMQ, Temporal, Celery, Sidekiq) in under 10 seconds.
+> **Your webhook returned HTTP 200. Did it leave the correct application state?**
+> Test Stripe and Razorpay webhook scenarios locally, then observe explicit state assertions through your application’s probe endpoint.
 
 [![GitHub Actions CI](https://github.com/yavonalabs/invariant/actions/workflows/ci.yml/badge.svg)](https://github.com/yavonalabs/invariant/actions)
 [![NPM Version](https://img.shields.io/npm/v/@yavona/invariant.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/@yavona/invariant)
@@ -10,48 +10,40 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
 [![Website](https://img.shields.io/badge/website-yavonalabs.com-cyan.svg?style=flat-square)](https://yavonalabs.com)
 
-![Invariant CLI Demo](https://raw.githubusercontent.com/yavonalabs/invariant/main/demo.svg)
-
 ---
 
 ## 🚀 The 60-Second Payment Vulnerability Demo
 
-Run this completely self-contained demo in your terminal. It spins up a transient mock payment server and blasts it with 20 concurrent webhooks to demonstrate a critical race condition. **Zero dependencies. No Docker. No DB.**
+Compare a flawed and a fixed in-memory payment service using 20 distinct simulated payments, real local HTTP requests, and the same assertion observer used by the CLI. Only the concurrent balance check is executed; this demo does not test signatures, idempotency, or crash recovery. **No runtime package dependencies, Docker, database, or credentials.**
 
 ```bash
-npx @yavona/invariant demo
+npx @yavona/invariant@alpha demo
 ```
 
 ---
 
-## What Invariant Is (and Isn't)
+## What Invariant verifies
 
-**Invariant is NOT a simple HTTP event trigger tool like `stripe trigger`.**
+Invariant supplies eight synthetic webhook scenarios and evaluates your JavaScript assertions against a JSON state probe. Four core scenarios are enabled by `init`; the other four require additional application-specific fields and are commented out in the generated configuration.
 
-`stripe trigger` dispatches webhooks to your application with zero verification of what happens inside your database.
+A passing result means the expected HTTP statuses matched and the configured assertion held in sampled observations after convergence, within the configured window. It does **not** establish formal correctness, provider settlement, queue completion, or the absence of later mutations. The probe and assertion define the coverage: counting payment rows alone cannot detect a wrong ledger amount or the wrong customer's entitlement.
 
-**Invariant is a Business Invariant Assertion Engine.** It packages a pre-built library of **8+ battle-tested payment gateway edge cases** out of the box and queries your application's state probe endpoint (`/api/db-state`) to mathematically prove that your backend state mutations satisfied business post-conditions—even across async queue workers (BullMQ, Temporal, Celery, Sidekiq).
+There are no direct queue integrations. Background workers are observed indirectly through the state exposed by your application.
 
-```
-Datadog / Sentry    ---> "Is the application throwing runtime exceptions?"
-Stripe CLI trigger  ---> "Did the webhook HTTP request get sent?"
-INVARIANT           ---> "Did the database mutation satisfy business post-conditions?"
-```
+## Built-in scenarios and limits
 
----
-
-## 🛡️ Built-in 8+ Battle-Tested Scenario Suite
-
-| Scenario | Invariant Checked | Expected Business Post-Condition |
+| Scenario | Execution | What to configure or verify |
 | :--- | :--- | :--- |
-| **`duplicate_delivery`** | Idempotency Lock | Duplicate retries preserve single payment row (`paymentCount == baseline + 1`) |
-| **`tampered_signature`** | HMAC Security | Invalid signatures rejected HTTP 401 without mutating DB state |
-| **`out_of_order`** | Lifecycle Ordering | Refund arriving before payment must not corrupt state ledger |
-| **`server_error_resilience`** | 500 Failure Rollback | Server 500 crashes must roll back completely without partial DB writes |
-| **`concurrent_race_condition`** | Background Queue Lock | Burst of simultaneous webhooks must preserve exact single DB balance |
-| **`partial_refund_bounds`** | Ledger Integrity | Refunded amount must never exceed total captured payment amount |
-| **`subscription_downgrade`** | State Transition | Canceled subscription updates must preserve correct user tier |
-| **`schema_replay_tolerance`** | Migration Safety | Legacy payload versions replayed after migration must handle safely |
+| `duplicate_delivery` | Same event delivered twice sequentially | One payment effect; include ledger amount and customer identity for stronger coverage |
+| `tampered_signature` | One event with an invalid signature | Explicit rejection status and unchanged relevant state |
+| `out_of_order` | One refund for a payment not created by this scenario | Orphan-refund handling only; no later matching payment is delivered |
+| `server_error_resilience` | One event carrying a failure-injection marker | Your application must implement the hook; no automatic crash, retry, or rollback injection |
+| `concurrent_race_condition` | Two simultaneous deliveries of the same event | Duplicate effects under this interleaving; not exhaustive concurrency testing |
+| `partial_refund_bounds` | Synthetic over-limit refund | Bounds assertion against seeded application state; not a sequence of legitimate partial refunds |
+| `subscription_downgrade` | One synthetic cancellation | Both expected tier and cancellation state; seed a matching subscription |
+| `schema_replay_tolerance` | One legacy-shaped payload | Your defined compatibility policy; not exhaustive API-version coverage |
+
+Payloads are fixtures with provider-format signatures, not live gateway events. Map customer, payment, and subscription identifiers to your test data using `payload` or synchronous `generatePayload(eventId, baseline)`. A signed synthetic payload does not establish provider acceptance or schema completeness.
 
 ---
 
@@ -96,8 +88,9 @@ app.post(
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
-    // Invariant Failure Injection Support
-    if (event.data?.object?.metadata?.invariant_test === 'trigger_db_failure') {
+    // Dev-only pre-processing failure. This does not test transaction rollback.
+    if (process.env.NODE_ENV !== 'production' &&
+        event.data?.object?.metadata?.invariant_test === 'trigger_db_failure') {
       return res.status(500).json({ error: 'Simulated DB failure' });
     }
 
@@ -111,23 +104,82 @@ app.post(
 
 ## Quickstart
 
-Run Invariant directly in any Node.js, Python, Java, or Go project with zero installation:
+**Need help with your first test?** [Open a setup-help issue](https://github.com/yavonalabs/invariant/issues/new?template=setup-help.md). Tell us your framework, provider, CLI version, and where you got stuck. I'll help you configure one payment flow; repository access is not required to start.
+
+**Already tried it?** [Tell us what happened](https://github.com/yavonalabs/invariant/issues/new?template=feedback.md): setup worked, setup got blocked, a check failed, or all configured checks passed. One selection and a sentence are enough. Feedback is optional—even if you only downloaded it or ran the demo.
+
+GitHub issues are public. Share a sanitized summary; omit code, credentials, payment data, private URLs, and full reports. The CLI does not send feedback or open an issue automatically.
+
+Requires Node.js 18+ to run the CLI. The target application can use any language. First-time npx use downloads the package; execution then uses your configured endpoints.
 
 > 💡 **Note**: The `@yavona/invariant` NPM package runs directly against your own local app endpoints (`targetUrl` & `probeUrl`). If you wish to run against our built-in standalone mock server demo (`test/mock-server.js`), clone the repository: `git clone https://github.com/yavonalabs/invariant.git`.
 
 ### 1. Initialize Configuration
 ```bash
-npx @yavona/invariant init
+npx @yavona/invariant@alpha init
 ```
+
+Edit the generated URLs, signing secret, assertions, and fixture identifiers for your test environment. Reset is disabled by default. Scope probe queries to this test’s records or use an isolated database; unrelated writes can invalidate aggregate assertions. The ordering example also requires a `payments` array; adapt its illustrative corruption-marker check to your schema.
 
 ### 2. Execute Stripe Webhook Invariant Tests
 ```bash
-INVARIANT_WEBHOOK_SECRET=whsec_xyz npx @yavona/invariant test stripe-webhooks
+INVARIANT_WEBHOOK_SECRET=whsec_xyz npx @yavona/invariant@alpha test stripe-webhooks
 ```
 
 ---
 
-## Rich Real-World Invariant Assertions (`invariant.config.js`)
+## Diagnose setup before sending events
+
+`doctor` loads your trusted JavaScript config and makes a GET request to the state probe. It does not send a webhook, call reset, run an assertion, or invoke a payload generator.
+
+```sh
+npx @yavona/invariant@alpha doctor --config invariant.config.js
+```
+
+It checks configuration, explicit HTTP expectations, time budgets, the probe response, and declared field types. Signing-secret compatibility and fixture identifiers are reported as unverified because confirming them requires your application or an executed test. A successful diagnostic exits 0 with these limits; setup problems exit 2. It does not certify a payment outcome.
+
+Declare fields globally or on individual invariants:
+
+```javascript
+requiredProbeFields: {
+  paymentCount: "integer",
+  ledgerBalance: "integer",
+  "customer.id": "string"
+},
+// Optional authentication for GET requests to the state probe:
+probeHeaders: { Authorization: process.env.INVARIANT_PROBE_TOKEN }
+```
+
+Supported field types: `integer` (safe integer), `number` (finite), `string`, `boolean`, `array`, and `object`. Nested paths use dots. If using probeHeaders, set its environment variable to a valid header value; omit probeHeaders when unused. Tests enforce declared fields before dispatch and during observations. For legacy configs without declarations, doctor warns that it cannot infer fields from arbitrary JavaScript.
+
+## Local evidence reports
+
+```sh
+npx @yavona/invariant@alpha test payment --config invariant.config.js --report-dir ./reports --ci
+npx @yavona/invariant@alpha doctor --config invariant.config.js --report-dir ./reports
+```
+
+Each run creates a unique subdirectory containing:
+
+- `report.html`: readable case results, HTTP statuses, before/after state tables, and expandable evidence.
+- `report.json`: versioned structured evidence including fixtures, dispatch order, responses, baseline and last state, observation samples, durations, and scope.
+- `junit.xml`: CI integration; assertion/HTTP failures use failure entries, inconclusive results use error entries, and unexecuted checks use skipped entries.
+
+A `failed` result means an HTTP expectation or state predicate did not hold. `inconclusive` means an assertion error, probe problem, insufficient stability evidence, or execution failure prevented a result. Neither automatically establishes a root cause or severity. Setup errors leave the remaining cases `not_run`. If report output cannot be written, the command exits 2 rather than silently succeeding.
+
+Reports are opt-in and stay local. Signing secrets, configured probe-header values, common sensitive fields, and `reportRedactKeys` are redacted. URLs omit credentials and query strings. Add application-specific field names with `reportRedactKeys: ["customerName", "internalReference"]`. Automatic redaction is not exhaustive; use test data and inspect before sharing. Responses are limited to 2 MiB, strings to 16,000 characters, and retained observation records to 200 per case. The report marks truncation; the total sample count remains available. Concurrent request order records dispatch order, not guaranteed server arrival order.
+
+To archive reports in GitHub Actions, add an `actions/upload-artifact` step with `if: always()` and the report directory path to your application's test workflow. The generated files can contain application data even after redaction.
+
+## Real database and background queue example
+
+The [SQLite reference application](examples/sqlite-queue/README.md) provides fixed and deliberately flawed backends, a persistent queue, two worker threads, actual transaction rollback, provider-format signature verification, and customer-scoped probes. It requires Python in addition to Node, with no pip packages or Docker.
+
+Run it from a clone of this repository; it is a reference application rather than part of the npm runtime. The linked guide includes both shell variants and commands to produce before/after reports. Use `node src/index.js` in a clone to try unreleased CLI changes locally.
+
+---
+
+## Custom State Assertions (`invariant.config.js`)
 
 Invariant supports rich, arbitrary multi-table JSON state assertions against your application's probe endpoint:
 
@@ -148,8 +200,10 @@ module.exports = {
       description: "Duplicate webhooks must preserve single payment row and exact ledger balance",
       expectHttp: [200, 202],
       assertState: (state, httpRes, baseline) =>
-        (state.paymentCount ?? 0) === ((baseline.paymentCount ?? 0) + 1) &&
-        (state.ledgerBalance ?? 0) === ((baseline.ledgerBalance ?? 0) + 5000)
+        Number.isSafeInteger(state.paymentCount) && Number.isSafeInteger(baseline.paymentCount) &&
+        state.paymentCount === baseline.paymentCount + 1 &&
+        Number.isSafeInteger(state.ledgerBalance) && Number.isSafeInteger(baseline.ledgerBalance) &&
+        state.ledgerBalance === baseline.ledgerBalance + 5000
     },
     {
       scenario: "tampered_signature",
@@ -157,7 +211,8 @@ module.exports = {
       description: "Invalid provider signature header must be rejected without mutating DB state",
       expectHttp: [400, 401],
       assertState: (state, httpRes, baseline) =>
-        (state.paymentCount ?? 0) === (baseline.paymentCount ?? 0)
+        Number.isSafeInteger(state.paymentCount) && Number.isSafeInteger(baseline.paymentCount) &&
+        state.paymentCount === baseline.paymentCount
     },
     {
       scenario: "out_of_order",
@@ -165,8 +220,9 @@ module.exports = {
       description: "Out-of-order refund events prior to payment must not corrupt state ledger",
       expectHttp: [200, 202, 400],
       assertState: (state, httpRes, baseline) =>
-        (state.refundedAmount ?? 0) <= (state.capturedAmount ?? 0) &&
-        (state.payments || []).every((p) => p.status !== "CORRUPTED")
+        Number.isSafeInteger(state.refundedAmount) && Number.isSafeInteger(state.capturedAmount) &&
+        state.refundedAmount >= 0 && state.refundedAmount <= state.capturedAmount &&
+        Array.isArray(state.payments) && state.payments.every((p) => p && p.status !== "CORRUPTED")
     },
     {
       scenario: "server_error_resilience",
@@ -174,13 +230,29 @@ module.exports = {
       description: "Server 500 errors must be handled gracefully without inserting corrupt DB records",
       expectHttp: [500],
       assertState: (state, httpRes, baseline) =>
-        (state.paymentCount ?? 0) === (baseline.paymentCount ?? 0)
+        Number.isSafeInteger(state.paymentCount) && Number.isSafeInteger(baseline.paymentCount) &&
+        state.paymentCount === baseline.paymentCount
     }
   ]
 };
 ```
 
 ---
+
+## Observation semantics and migration
+
+- Every invariant requires an `assertState` (or legacy `assert`) function and explicit `expectHttp` status code(s). Invalid configuration exits with code 2 before webhook dispatch.
+- Assertions may return a boolean or a Promise of a boolean. Missing assertions, truthy non-booleans, exceptions, and rejected promises cannot pass. Custom callbacks should be side-effect-free; asynchronous callbacks must resolve within the remaining observation budget. Synchronous code that blocks the Node.js event loop cannot be interrupted by this budget.
+- `assertionTimeoutMs` (default 5000) is the full observation window after HTTP dispatch. The observer samples approximately every 200ms, plus probe/assertion latency. No new probe starts in the final 200ms; the remaining time is allowed to elapse. It permits initial non-matching samples while workers converge, but a false sample after a true sample fails immediately.
+- A pass also requires matching samples spanning `stabilityWindowMs` (default 400). Set the observation window longer than this value plus 200ms and allow additional time for worker completion. A late first match fails if too little stability evidence remains.
+- Probe errors, malformed/non-object JSON, assertion errors, or an observation deadline exceeded during a probe/assertion fail the check. A timeout or unavailable probe is incomplete evidence, not proof of a payment defect. HTTP expectation mismatches fail without waiting through the state window.
+- Negative assertions (for example, "no write occurred") observe the same full window. Work that finishes afterward or mutations between samples can still be missed. Use test isolation and a window that covers expected retries and processing delays.
+- Runs now take longer than the earlier first-match implementation: eight passing scenarios with default windows take at least 40 seconds plus request time. Reduce budgets only when justified by your application's timing.
+- Test exit codes: 0 = configured checks passed; 1 = failed or inconclusive cases; 2 = configuration, initial probe/schema, or report-writing error. Failure output includes baseline and last observed state, so keep test probes limited to relevant test data.
+
+The generated reset URL is now null. Configure a reset endpoint explicitly if needed. Existing configs need explicit status expectations, valid boolean assertions, and adequate observation budgets. Default assertions now reject absent required fields, and the subscription example requires both tier revocation **and** cancellation.
+
+To test rollback, inject an actual failure after a write inside the transaction and assert all relevant tables. The starter HTTP 500 hook above only checks pre-processing rejection. To test full ordering/recovery, add application-specific event sequences and replay steps; the current built-ins do not provide those guarantees.
 
 ## Clean Output for CI/CD Pipelines (`--ci` Flag)
 
@@ -204,7 +276,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm ci
       - run: npm test --ci
 ```
 
@@ -216,10 +287,11 @@ If `@yavona/invariant` helped you test your Stripe or Razorpay webhook integrati
 
 ---
 
-## Developer Validation & Feedback
+## Developer Feedback & Setup Help
 
-Trying `@yavona/invariant` in your dev environment? We would love to hear your feedback:
-* [Open a Developer Feedback Issue on GitHub](https://github.com/yavonalabs/invariant/issues/new?template=feedback.md)
+We want to understand what happens after you download Invariant. [Share your first-test experience](https://github.com/yavonalabs/invariant/issues/new?template=feedback.md), including if you stopped before testing your application. A failing check is useful feedback even when its cause is still unknown.
+
+For hands-on configuration questions, [ask for help with one payment flow](https://github.com/yavonalabs/invariant/issues/new?template=setup-help.md). Start with your CLI version, framework, provider, and a sanitized description. Both paths are voluntary public GitHub issues; no application access or sensitive data is requested.
 
 ---
 

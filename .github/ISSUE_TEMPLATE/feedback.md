@@ -1,26 +1,38 @@
 ---
-name: Developer Validation Feedback
-about: Provide feedback on testing your backend with @yavona/invariant
+name: Tell us how your first test went
+about: Share whether you tried Invariant, got stuck, or completed a payment test
 title: '[Feedback]: '
 labels: 'developer-feedback'
 assignees: ''
 ---
 
-### 1. Setup Time
-How long did it take to get your first `npx @yavona/invariant test stripe-webhooks` run passing or failing against your backend?
-- [ ] Under 5 minutes
-- [ ] 5 - 15 minutes
-- [ ] Over 15 minutes (please describe setup friction)
+One selection and a sentence are enough. Feedback is optional, including when you did not get as far as testing your application.
 
-### 2. Bug Discovery / Value
-Did Invariant catch any unexpected state behavior, missing idempotency logic, or signature handling edge case in your application?
-- [ ] Yes! (Describe what it caught: _________)
-- [ ] No bugs found, but gave confidence in our existing handler.
-- [ ] Encountered setup issues / false failure (Describe: _________)
+**This issue is public. Do not include code, credentials, customer/payment data, private URLs, or full reports.**
 
-### 3. Feature Requests / Roadmap
-What feature or provider adapter would make Invariant essential for your team's workflow?
-- [ ] Generic HMAC Webhook Adapter
-- [ ] PayPal / Shopify Webhook Support
-- [ ] Custom CLI Assertion Generators
-- [ ] Other: __________
+### What did you try?
+
+- [ ] Downloaded or cloned it, but have not run it
+- [ ] Ran the bundled demo only
+- [ ] Tried it against my own local or staging application
+
+### What happened?
+
+- [ ] Setup got blocked
+- [ ] Setup worked, but I have not completed a test
+- [ ] A check failed; I have not established the cause
+- [ ] A check failed and I confirmed an application bug
+- [ ] All configured checks passed
+- [ ] I decided not to continue
+
+### What helped or stopped you?
+
+A sentence about what happened or why you stopped is enough. Please distinguish a failing check from a confirmed bug.
+
+### Optional context
+
+- Framework and payment provider:
+- Approximate time spent getting to your first result:
+- Would you run it again or keep it in CI? Why?
+
+If you want help configuring one payment flow, use the [setup-help template](https://github.com/yavonalabs/invariant/issues/new?template=setup-help.md).

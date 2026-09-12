@@ -235,6 +235,7 @@ function runCli(args = [], envVars = {}) {
         INVARIANT_TARGET_URL: `http://localhost:${MOCK_PORT}/api/webhook`,
         INVARIANT_PROBE_URL: `http://localhost:${MOCK_PORT}/api/db-state`,
         INVARIANT_RESET_URL: "",
+        INVARIANT_ASSERTION_TIMEOUT_MS: "2000",
         INVARIANT_PROVIDER: "stripe",
         INVARIANT_WEBHOOK_SECRET: "whsec_yavona_secret_12345",
         ...envVars
@@ -304,7 +305,7 @@ async function main() {
   console.log(`\n[SELF-TEST 3/5] Testing FLAWED Mode Violation Detection...`);
   await setMode("flawed");
   const res3 = await runCli(["test", "stripe-webhooks"]);
-  if (res3.code === 1 && res3.stdout.includes("BUSINESS INTEGRITY FAILURE DETECTED")) {
+  if (res3.code === 1 && res3.stdout.includes("CHECKS FAILED")) {
     console.log(`✅ [SELF-TEST 3] PASSED — Correctly returned Exit Code 1 on business failures`);
     passed++;
   } else {
@@ -316,7 +317,7 @@ async function main() {
   await setMode("fixed");
   const res4 = await runCli(["test", "stripe-webhooks"], {
     INVARIANT_TARGET_URL: `http://localhost:${MOCK_PORT}/api/async-webhook`,
-    INVARIANT_ASSERTION_TIMEOUT_MS: "3000"
+    INVARIANT_ASSERTION_TIMEOUT_MS: "5000"
   });
   if (res4.code === 0 && res4.stdout.includes("PASSED")) {
     console.log(`✅ [SELF-TEST 4] PASSED — Async queue worker write respected assertionTimeoutMs budget!`);

@@ -1,7 +1,7 @@
 {
   "name": "@yavona/invariant",
-  "version": "0.2.0-alpha.3",
-  "description": "Invariant — The Business Invariant Layer for Software. Prove payment webhooks, state mutations, and business invariants locally.",
+  "version": "0.3.0-alpha.1",
+  "description": "Invariant — Test payment webhook scenarios and observe application state assertions locally.",
   "main": "src/index.js",
   "bin": {
     "invariant": "src/index.js",
@@ -17,11 +17,12 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "test": "node test/cli-self-test.js",
+    "test": "node --test test/trust-regression.test.js test/product-features.test.js && node test/cli-self-test.js",
     "test:stripe": "node src/index.js test stripe-webhooks",
     "test:razorpay": "node src/index.js test razorpay-webhooks",
     "mock": "node test/mock-server.js",
-    "syntax": "node --check src/index.js && node --check src/commands/init.js && node --check src/commands/test.js && node --check src/utils/formatter.js && node --check src/providers/stripe.js && node --check src/providers/razorpay.js"
+    "syntax": "node test/check-syntax.js",
+    "test:example": "node --test test/reference-example.test.js"
   },
   "keywords": [
     "invariant",
@@ -39,7 +40,8 @@
     "node": ">=18.0.0"
   },
   "files": [
-    "src"
+    "src",
+    "CHANGELOG.md"
   ],
   "publishConfig": {
     "access": "public"

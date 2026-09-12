@@ -1,0 +1,6 @@
+node_modules/
+reports/
+artifacts/
+*.log
+*.tgz
+__pycache__/
