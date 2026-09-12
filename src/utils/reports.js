@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const LIMITS = "Results apply only to the configured fixtures, assertions and sampled observation windows. They do not certify provider settlement, complete queue drainage, or absence of later mutations. Inconclusive means evidence could not establish a result.";
+const REVIEW_WARNING = "WARNING: Manually review every report file before sharing. Redaction covers known key patterns and configured secrets only. Free-text fields may contain personal or payment data.";
 
 function createRedactor(config = {}) {
   config = config && typeof config === "object" ? config : {};
@@ -22,7 +23,7 @@ function createRedactor(config = {}) {
     if (Array.isArray(value)) return value.map(v => redact(v, depth + 1));
     if (value && typeof value === "object") {
       return Object.fromEntries(Object.entries(value).map(([key, item]) => [key,
-        keys.has(key.toLowerCase()) || /secret|password|token|authorization|cookie|signature|email|phone|contact|card|address/i.test(key)
+        keys.has(key.toLowerCase()) || /secret|password|token|authorization|cookie|signature|email|phone|contact|card|address|name|ssn|tax|bank|account|routing/i.test(key)
           ? "[REDACTED]" : redact(item, depth + 1)]));
     }
     return value;
@@ -79,6 +80,7 @@ function renderHTML(report) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>Invariant evidence report</title><style>
 body{font:16px/1.6 system-ui,sans-serif;color:#192c3a;background:#f4f7fa;margin:0}main{max-width:980px;margin:48px auto;padding:0 24px}h1{font-size:36px;line-height:1.2;margin:10px 0}h2{font-size:19px;margin:0}h3{font-size:15px;margin:20px 0 8px}p{margin:10px 0}.eyebrow{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#496178}.meta{color:#526578}article,.scope{background:white;border:1px solid #d7e1e8;border-radius:10px;padding:22px;margin:18px 0}.status{font-weight:700;text-transform:uppercase;font-size:13px;letter-spacing:.07em}.passed{color:#176347}.failed{color:#b22836}.inconclusive,.warning{color:#895814}table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:14px;margin-bottom:20px}th,td{text-align:left;padding:9px 8px;border-bottom:1px solid #e1e7ed;overflow-wrap:anywhere}th{color:#496178;font-weight:600;background:#f4f7fa}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#eef2f6;padding:16px;border-radius:6px;font:13px/1.6 ui-monospace,monospace}summary{cursor:pointer;color:#234c78}a{color:#234c78}header{border-bottom:3px solid #244e6d;padding-bottom:24px}footer{font-size:13px;color:#526578;margin:32px 0}@media print{body{background:white}main{margin:0}article{break-inside:avoid}}
 </style></head><body><main><header><div class="eyebrow">Yavona Labs · Invariant ${xml(report.version)}</div><h1>${report.kind === "doctor" ? "Setup diagnostic" : "Payment test evidence"}</h1><p class="status ${xml(report.status)}">${xml(report.status)}</p><p class="meta">${xml(report.startedAt)} · ${xml(report.durationMs || 0)}ms</p><p>${xml(counts)}</p><a href="report.json">JSON evidence</a> · <a href="junit.xml">JUnit XML</a></header>
+<section class="scope warning" role="note"><h2>Manual review required before sharing</h2><p><strong>${xml(REVIEW_WARNING)}</strong></p></section>
 ${report.error ? `<article><h2>Run could not complete</h2><p>${xml(report.error)}</p></article>` : ""}
 <section class="scope"><h2>Scope and interpretation</h2><p>${xml(report.scope)}</p><p>Reports use automatic field redaction and truncate long strings. Review before sharing; custom business data may still be sensitive.</p>${report.configuration ? `<details><summary>Configuration summary</summary><pre>${xml(JSON.stringify(report.configuration, null, 2))}</pre></details>` : ""}</section>
 ${report.cases.map(c => `<article><div class="status ${xml(c.status)}">${xml(c.status.replaceAll("_", " "))}</div><h2>${xml(c.name)}</h2><p class="meta">${xml(c.scenario || "")}</p><p>${xml(c.error || c.message || c.description || "")}</p>${c.deliveries?.length ? `<p class="meta">HTTP responses by dispatch order: ${c.deliveries.map(d => xml(d.response?.status ?? "No response")).join(" → ")}${c.samples !== undefined ? ` · ${xml(c.samples)} samples over ${xml(c.observedMs)}ms` : ""}</p>` : ""}${stateTable(c)}<details><summary>Full evidence and observations</summary><pre>${xml(JSON.stringify(c, null, 2))}</pre></details></article>`).join("\n")}
@@ -87,10 +89,17 @@ ${report.cases.map(c => `<article><div class="status ${xml(c.status)}">${xml(c.s
 
 function writeReports(report, directory, config = {}) {
   if (!directory) return null;
+  // Warn before writing so a partially written report also carries a terminal warning.
+  console.error(REVIEW_WARNING);
   const root = path.resolve(directory);
   fs.mkdirSync(root, { recursive: true });
   const output = fs.mkdtempSync(path.join(root, "run-"));
-  const safe = createRedactor(config)(report);
+  const redact = createRedactor(config);
+  const safe = redact(report);
+  // Case names are report labels, not application fields. Keep labels useful in
+  // HTML/JUnit while still redacting every nested application field named "name".
+  safe.cases.forEach((item, index) => { item.name = redact(report.cases[index].name); });
+  safe.reviewWarning = REVIEW_WARNING;
   for (const [name, content] of [["report.json", JSON.stringify(safe, null, 2) + "\n"],
     ["junit.xml", renderJUnit(safe)], ["report.html", renderHTML(safe)]]) {
     fs.writeFileSync(path.join(output, name), content, { flag: "wx", mode: 0o600 });

@@ -10,6 +10,7 @@ This alpha makes webhook test outcomes depend on observed application state and 
 - JSON, HTML, and JUnit evidence reports with separate passed, failed, inconclusive, and not-run outcomes and automatic sensitive-value redaction. Review reports before sharing; redaction cannot cover every application field.
 - A SQLite-backed queue example demonstrating duplicate delivery, signature rejection, transaction rollback, and restart behavior for Stripe and Razorpay.
 - Voluntary setup-help and first-run feedback links to public GitHub issue templates.
+- Expanded redaction for name, SSN, tax, bank, account, and routing fields; mandatory-review reminders in terminal output, HTML, and JSON. Free-text PII still requires manual review or explicit field redaction with `reportRedactKeys`.
 
 ### Changed
 

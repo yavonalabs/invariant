@@ -6,7 +6,7 @@ const os = require("os");
 const http = require("http");
 const crypto = require("crypto");
 const { spawn } = require("child_process");
-const { renderHTML, renderJUnit, createRedactor } = require("../src/utils/reports");
+const { renderHTML, renderJUnit, createRedactor, writeReports } = require("../src/utils/reports");
 
 const CLI = path.resolve(__dirname, "../src/index.js");
 function run(cwd, args) {
@@ -23,7 +23,7 @@ function run(cwd, args) {
 
 test("reports escape executable content and redact configured secrets", () => {
   const redact = createRedactor({ webhookSecret: "whsec-PRIVATE", probeHeaders: { Authorization: "Bearer PRIVATE" }, reportRedactKeys: ["customerName"] });
-  const value = redact({ name: "<script>alert(1)</script>", email: "private@example.com",
+  const value = redact({ description: "<script>alert(1)</script>", email: "private@example.com",
     nested: { customerName: "Private Person", message: "contains whsec-PRIVATE" }, body: '{"token":"hidden","amount":5000}' });
   assert.equal(value.email, "[REDACTED]");
   assert.equal(value.nested.customerName, "[REDACTED]");
@@ -37,6 +37,43 @@ test("reports escape executable content and redact configured secrets", () => {
   const junit = renderJUnit(report);
   assert.match(junit, /failures="1"/);
   assert.doesNotMatch(junit, /\u0001|<script>/);
+});
+
+test("generated reports redact personal and banking fields across evidence; free text requires explicit redaction", t => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "invariant-redaction-"));
+  const warning = t.mock.method(console, "error", () => {});
+  const personal = { name: "Example Private Person", firstName: "PrivateFirst", LAST_NAME: "PrivateLast",
+    ssn: "000-12-3456", taxId: "TAX-PRIVATE-987", bank: "Private Bank", bankAccount: "BANK-987654",
+    account_number: "ACCOUNT-123456", routingNumber: "ROUTING-654321" };
+  const note = "Contact example@example.test; card 4111111111111111";
+  const report = { kind: "test", status: "failed", cases: [{ name: "Duplicate delivery", status: "failed",
+    baselineState: { ...personal }, lastState: { customers: [personal], userNote: note },
+    observations: [{ state: personal }], deliveries: [{ payload: personal, response: { body: JSON.stringify(personal) } }] }] };
+  try {
+    assert.equal(writeReports(report, null), null);
+    assert.equal(warning.mock.callCount(), 0);
+    const directory = writeReports(report, cwd);
+    assert.equal(warning.mock.callCount(), 1);
+    assert.match(warning.mock.calls[0].arguments[0], /WARNING: Manually review every report file before sharing/);
+    for (const filename of ["report.json", "report.html", "junit.xml"]) {
+      const content = fs.readFileSync(path.join(directory, filename), "utf8");
+      for (const value of Object.values(personal)) assert.ok(!content.includes(value), `${filename} leaked ${value}`);
+      assert.match(content, /Duplicate delivery/);
+      assert.match(content, /\[REDACTED\]/);
+      // Document the boundary honestly: arbitrary free text is not PII-scanned.
+      assert.ok(content.includes(note));
+    }
+    const json = JSON.parse(fs.readFileSync(path.join(directory, "report.json"), "utf8"));
+    assert.match(json.reviewWarning, /Free-text fields/);
+    assert.match(fs.readFileSync(path.join(directory, "report.html"), "utf8"), /Manual review required before sharing/);
+    const explicit = writeReports(report, cwd, { reportRedactKeys: ["userNote"] });
+    for (const filename of ["report.json", "report.html", "junit.xml"]) {
+      assert.ok(!fs.readFileSync(path.join(explicit, filename), "utf8").includes(note));
+    }
+    assert.equal(report.cases[0].baselineState.name, personal.name, "report generation must not mutate live state");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
 });
 
 test("doctor is read-only; test emits classified evidence and real provider headers", async () => {
@@ -95,6 +132,7 @@ test("doctor is read-only; test emits classified evidence and real provider head
   }
   const args = command => [command, "--config", "custom.config.js", "--report-dir", output];
   function latest(result) {
+    assert.equal((result.output.match(/WARNING: Manually review every report file before sharing/g) || []).length, 1, result.output);
     const line = result.output.split(/\r?\n/).find(s => s.startsWith("Reports: "));
     assert.ok(line, result.output);
     const directory = line.slice("Reports: ".length);
@@ -148,6 +186,7 @@ test("doctor is read-only; test emits classified evidence and real provider head
     result = await run(cwd, ["test", "--config", "custom.config.js", "--report-dir", blockedOutput]);
     assert.equal(result.code, 2, result.output);
     assert.match(result.output, /REPORT ERROR/);
+    assert.match(result.output, /WARNING: Manually review every report file before sharing/);
     assert.doesNotMatch(result.output, /CONFIGURED CHECKS PASSED/);
 
     config("(() => { throw new Error('broken assertion'); })()"); disableReset();
@@ -175,6 +214,8 @@ test("doctor is read-only; test emits classified evidence and real provider head
     assert.match(latest(result).report.error, /expectHttp/);
     result = await run(cwd, ["doctor", "--report-dir"]);
     assert.equal(result.code, 2);
+    result = await run(cwd, ["doctor", "--config", "custom.config.js"]);
+    assert.doesNotMatch(result.output, /Manually review every report file/);
   } finally {
     server.closeAllConnections?.();
     await new Promise(resolve => server.close(resolve));
