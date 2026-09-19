@@ -12,7 +12,7 @@
 
 ---
 
-## 🚀 The 60-Second Payment Vulnerability Demo
+## 🚀 Try the Synthetic Payment-State Demo
 
 Compare a flawed and a fixed in-memory payment service using 20 distinct simulated payments, real local HTTP requests, and the same assertion observer used by the CLI. Only the concurrent balance check is executed; this demo does not test signatures, idempotency, or crash recovery. **No runtime package dependencies, Docker, database, or credentials.**
 
@@ -21,6 +21,17 @@ npx @yavona/invariant@alpha demo
 ```
 
 ---
+
+## Invariant by Yavona Labs
+
+Invariant is an open-source product from [Yavona Labs](https://yavonalabs.com), an independent software studio.
+
+- **See the output:** [Inspect a sample evidence report](https://yavonalabs.com/evidence/invariant/report.html), generated against a deliberately flawed SQLite example with synthetic data. It is not a customer case study.
+- **Start with your app:** [Request free 30-minute guided setup](https://yavonalabs.com/services/#guided-setup). We assess fit and help start one check in your local or synthetic staging environment. Completing integration may take longer; this is setup assistance, not an audit. Sessions are arranged subject to availability.
+- **Get engineering help:** [Discuss a $299 payment-flow check](https://yavonalabs.com/services/#payment-flow-check): one flow, one provider, up to three applicable scenarios, written findings, and a walkthrough. Scope, prerequisites, and timing are agreed before payment; implementation is excluded.
+- **Need a deeper review?** [Explore the $995 audit and $2,500 audit with reference patch](https://yavonalabs.com/services/). The CLI remains free; paid services add application-specific engineering work.
+
+Share only sanitized context when requesting help, never credentials or customer data.
 
 ## What Invariant verifies
 
@@ -47,9 +58,9 @@ Payloads are fixtures with provider-format signatures, not live gateway events. 
 
 ---
 
-## ⚡ 2-Minute Express.js Starter Snippet
+## ⚡ Express.js Probe Starter Snippet
 
-Add this lightweight probe endpoint to your local Express app to get instant state verification:
+Adapt this illustrative probe endpoint to expose the test state from your local Express app:
 
 ```javascript
 // Express.js Backend Starter (/api/db-state)
