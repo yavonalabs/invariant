@@ -21,6 +21,81 @@ function run(cwd, args) {
   });
 }
 
+test("generated starter rejects wrong ledger, scope, and unfinished work through the CLI", async () => {
+  const root = fs.realpathSync(os.tmpdir());
+  const cwd = fs.mkdtempSync(path.join(root, "invariant-starter-"));
+  let mode = "correct";
+  let state;
+  let seen;
+  let deliveries = 0;
+  const baseline = { customerId: "test_customer", currency: "USD", paymentCount: 0,
+    ledgerBalance: 0, pendingJobs: 0, payments: [] };
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", chunk => { body += chunk; });
+    req.on("end", () => {
+      res.setHeader("Content-Type", "application/json");
+      if (req.url === "/probe") return res.end(JSON.stringify(state));
+      const event = JSON.parse(body);
+      deliveries++;
+      if (!seen.has(event.id)) {
+        seen.add(event.id);
+        state.paymentCount++;
+        state.ledgerBalance += mode === "wrong amount" ? 100 : 5000;
+        if (mode === "wrong customer") state.customerId = "other_fixture";
+        if (mode === "wrong currency") state.currency = "INR";
+        if (mode === "unfinished") state.pendingJobs = 1;
+      }
+      res.statusCode = 202;
+      res.end('{}');
+    });
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const initialized = await run(cwd, ["init"]);
+    assert.equal(initialized.code, 0, initialized.output);
+    const configFile = path.join(cwd, "invariant.config.js");
+    const original = fs.readFileSync(configFile, "utf8");
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    fs.appendFileSync(configFile, `
+      module.exports.targetUrl = '${baseUrl}/webhook';
+      module.exports.probeUrl = '${baseUrl}/probe';
+      module.exports.resetUrl = null;
+      module.exports.provider = 'stripe';
+      module.exports.assertionTimeoutMs = 900;
+      module.exports.stabilityWindowMs = 200;
+      module.exports.invariants = module.exports.invariants.slice(0, 1);
+      module.exports.invariants[0].generatePayload = id => ({id});
+    `);
+    for (mode of ["correct", "wrong amount", "wrong customer", "wrong currency", "unfinished", "missing ledger"]) {
+      state = { ...baseline };
+      seen = new Set();
+      if (mode === "missing ledger") delete state.ledgerBalance;
+      const before = deliveries;
+      const result = await run(cwd, ["test", "payment"]);
+      assert.equal(result.code, mode === "correct" ? 0 : mode === "missing ledger" ? 2 : 1, `${mode}: ${result.output}`);
+      assert.equal(deliveries - before, mode === "missing ledger" ? 0 : 2);
+      if (mode !== "correct") assert.match(result.output, /add --report-dir/);
+      assert.equal(fs.existsSync(path.join(cwd, "reports")), false, "reports must remain opt-in");
+    }
+    // Existing user configs must not be overwritten by init.
+    fs.writeFileSync(configFile, original);
+    await run(cwd, ["init"]);
+    assert.equal(fs.readFileSync(configFile, "utf8"), original);
+    const config = require(configFile);
+    const unchanged = config.invariants.find(inv => inv.scenario === "tampered_signature").assertState;
+    assert.equal(unchanged({ ...baseline, ledgerBalance: 1 }, {}, baseline), false);
+    assert.equal(unchanged({ ...baseline }, {}, baseline), true);
+  } finally {
+    server.closeAllConnections?.();
+    await new Promise(resolve => server.close(resolve));
+    const resolved = fs.realpathSync(cwd);
+    assert.equal(path.dirname(resolved), root);
+    assert.ok(path.basename(resolved).startsWith("invariant-starter-"));
+    fs.rmSync(resolved, { recursive: true, force: true });
+  }
+});
+
 test("reports escape executable content and redact configured secrets", () => {
   const redact = createRedactor({ webhookSecret: "whsec-PRIVATE", probeHeaders: { Authorization: "Bearer PRIVATE" }, reportRedactKeys: ["customerName"] });
   const value = redact({ description: "<script>alert(1)</script>", email: "private@example.com",

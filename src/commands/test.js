@@ -143,6 +143,10 @@ async function handleTest(suite = "payment", options = {}) {
   const passed = report.cases.filter(item => item.status === "passed").length;
   console.log(`\nSUMMARY: ${passed}/${report.cases.length} Invariants Passed (${report.durationMs}ms)`);
   console.log(exitCode === 0 ? "STATUS: CONFIGURED CHECKS PASSED — Sampled assertions passed within their observation windows." : "STATUS: CHECKS FAILED — Review failed and inconclusive evidence.");
+  if (exitCode !== 0 && !options.reportDir) {
+    console.log("Hint: add --report-dir ./reports to your test command for HTML state differences and an observation timeline on the next run. Re-running sends events again; use isolated test fixtures.");
+    console.log("Reports may contain application data. Manually review every report file before sharing; redaction covers known key patterns only.");
+  }
   if (exitCode === 2 || report.cases.some(item => item.status === "inconclusive" || item.httpMatched === false)) {
     printSetupHelp();
   }

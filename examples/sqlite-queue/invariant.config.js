@@ -27,10 +27,13 @@ module.exports = {
   assertionTimeoutMs: 2500, stabilityWindowMs: 400, requiredProbeFields: fields,
   invariants: [
     { scenario: "duplicate_delivery", name: "One credit across two queued deliveries", expectHttp: 202,
+      description: "Both deliveries finish; exactly one payment and 5000 minor units are credited to the fixture customer.",
       generatePayload: id => payload(id), assertState: creditOnce },
     { scenario: "concurrent_race_condition", name: "One credit across concurrent queued deliveries", expectHttp: 202,
+      description: "Both concurrent jobs finish without duplicate credit or a failed job.",
       generatePayload: id => payload(id), assertState: creditOnce },
     { scenario: "tampered_signature", name: "Invalid signature never enqueues a job", expectHttp: 401,
+      description: "Reject the signature while preserving the fixture ledger and all completed/failed job counts.",
       generatePayload: id => payload(id), assertState: (state, response, baseline) => settled(state) &&
         state.paymentCount === baseline.paymentCount && state.ledgerBalance === baseline.ledgerBalance &&
         state.completedJobs === baseline.completedJobs && state.failedJobs === baseline.failedJobs },

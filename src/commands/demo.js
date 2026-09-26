@@ -75,7 +75,7 @@ async function handleDemo() {
       assertion.state?.received === 20 && assertion.state.balanceCents === (flawed ? 5000 : expectedCents);
   }
   console.log("\nScope: sampled concurrent balance checks only. Idempotency, signatures, and crash recovery were not tested.");
-  console.log("Test your application: npx @yavona/invariant init");
+  console.log("Test your application: npx @yavona/invariant@alpha init");
   if (!demonstrated) process.exitCode = 1;
 }
 

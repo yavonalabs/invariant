@@ -4,6 +4,8 @@ This runnable example uses a real SQLite database, a persistent jobs table, two 
 
 From the repository root, start the fixed backend:
 
+Use `python3` instead of `python` in the manual server commands below if that is your Python 3.10+ executable. The `PYTHON` environment variable applies to the automated test runner, not these manual commands.
+
 ```sh
 python examples/sqlite-queue/server.py --mode fixed --db examples/sqlite-queue/fixed.sqlite
 ```
@@ -23,6 +25,8 @@ Open `report.html` in the reported output directory. The four checks should pass
 4. A worker fails **after executing a ledger insert**. Its transaction rolls back, the ledger remains unchanged, and a failed-job record makes completion observable.
 
 The fourth case deliberately expects HTTP 202, because the HTTP handler accepts the job before a background worker fails. It does not claim an HTTP 500 occurred.
+
+The example uses a 2500ms observation window for its short, controlled local worker delays. This is not a recommended budget for a customer application; allow for its processing and retry timing, and increase the budget on a slow machine. Work after the observation window remains outside the result's scope.
 
 ## Compare the flawed implementation
 

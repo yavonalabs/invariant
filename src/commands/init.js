@@ -1,6 +1,6 @@
 /**
  * Invariant CLI Configuration Initializer
- * Command: npx @yavona/invariant init
+ * Command: npx @yavona/invariant@alpha init
  */
 
 const fs = require("fs");
@@ -17,13 +17,38 @@ const resetUrl = envResetUrl === undefined
   ? null
   : (envResetUrl === "" || envResetUrl === "null" || envResetUrl === "false" ? null : envResetUrl);
 
+// Adapt these to your isolated fixture and payloads. Amounts are minor units.
+const expectedCustomerId = "test_customer";
+const expectedCurrency = "USD"; // Use INR for the built-in Razorpay fixtures.
+const expectedAmount = 5000;
+const paymentFields = { customerId: "string", currency: "string",
+  paymentCount: "integer", ledgerBalance: "integer", pendingJobs: "integer" };
+const scoped = state => state.customerId === expectedCustomerId && state.currency === expectedCurrency;
+// pendingJobs must include queued AND running work for this fixture.
+// Replace this with your app's completion evidence if it has different semantics.
+// An empty queue alone does not establish successful processing or rule out later retries.
+const settled = state => scoped(state) && state.pendingJobs === 0;
+const creditOnce = (state, response, baseline) => scoped(baseline) && settled(state) &&
+  Number.isSafeInteger(baseline.paymentCount + 1) &&
+  Number.isSafeInteger(baseline.ledgerBalance + expectedAmount) &&
+  state.paymentCount === baseline.paymentCount + 1 &&
+  state.ledgerBalance === baseline.ledgerBalance + expectedAmount;
+const unchanged = (state, response, baseline) => scoped(baseline) && settled(state) &&
+  state.paymentCount === baseline.paymentCount && state.ledgerBalance === baseline.ledgerBalance;
+
 module.exports = {
   // Target API Webhook Endpoint
   targetUrl:
     process.env.INVARIANT_TARGET_URL ||
     "http://localhost:3001/api/webhook",
 
-  // State Assertion Probe Endpoint (Queries backend DB state)
+  // Implement this GET endpoint in YOUR application; init does not create it.
+  // Return a consistent DB snapshot scoped to the fixture customer and currency:
+  // { customerId: "test_customer", currency: "USD", paymentCount: 0,
+  //   ledgerBalance: 0, pendingJobs: 0, payments: [] }
+  // Values must come from real test state, not hard-coded success responses.
+  // Keep it local/authenticated, and exclude unrelated writes and customer data.
+  // Guide: https://github.com/yavonalabs/invariant#probe-contract-and-fixture-mapping
   probeUrl:
     process.env.INVARIANT_PROBE_URL ||
     "http://localhost:3001/api/db-state",
@@ -53,52 +78,55 @@ module.exports = {
   // Invariant Specifications
   invariants: [
     // -------------------------------------------------------------------------
-    // CORE PAYMENT INVARIANTS (Active by default — requires paymentCount / ledger)
+    // CORE PAYMENT INVARIANTS (adapt probe, fixture mapping, and failure hook first)
     // -------------------------------------------------------------------------
     {
       scenario: "duplicate_delivery",
-      name: "idempotency",
-      requiredProbeFields: { paymentCount: "integer" },
+      name: "Duplicate deliveries credit the fixture once",
+      requiredProbeFields: paymentFields,
       description:
-        "Duplicate webhook events must preserve single DB state record",
+        "One payment row and the exact ledger increase for the configured customer and currency",
       expectHttp: [200, 202],
-      assertState: (state, httpRes, baseline) =>
-        Number.isSafeInteger(state.paymentCount) && Number.isSafeInteger(baseline.paymentCount) &&
-        state.paymentCount === baseline.paymentCount + 1
+      // Add generatePayload(eventId, baseline) here to return YOUR full synthetic
+      // provider event synchronously. Map its customer/payment IDs to test data.
+      // It replaces the built-in fixture; the CLI signs it and reuses it for duplicates.
+      // See the README's complete Stripe mapping example; do not use real events.
+      assertState: creditOnce
     },
     {
       scenario: "tampered_signature",
-      name: "security_signature",
-      requiredProbeFields: { paymentCount: "integer" },
+      name: "Invalid signatures preserve the scoped ledger",
+      requiredProbeFields: paymentFields,
       description:
-        "Invalid provider signature header must be rejected without mutating DB state",
+        "Reject invalid signatures without changing the scoped payment count or ledger balance",
       expectHttp: [400, 401],
-      assertState: (state, httpRes, baseline) =>
-        Number.isSafeInteger(state.paymentCount) && Number.isSafeInteger(baseline.paymentCount) &&
-        state.paymentCount === baseline.paymentCount
+      assertState: unchanged
     },
     {
       scenario: "out_of_order",
-      name: "lifecycle_ordering",
-      requiredProbeFields: { paymentCount: "integer", payments: "array" },
+      name: "Orphan refunds preserve the scoped ledger",
+      requiredProbeFields: { ...paymentFields, payments: "array" },
       description:
-        "Orphan refund must preserve payment count and contain no configured corruption markers",
+        "Orphan refund must preserve scoped count and balance and contain no configured corruption markers",
       expectHttp: [200, 202, 400],
       assertState: (state, httpRes, baseline) =>
-        Number.isSafeInteger(state.paymentCount) && Number.isSafeInteger(baseline.paymentCount) &&
-        state.paymentCount === baseline.paymentCount &&
+        unchanged(state, httpRes, baseline) &&
         Array.isArray(state.payments) && state.payments.every((p) => p && p.status !== "CORRUPTED")
     },
     {
       scenario: "server_error_resilience",
-      name: "server_error_resilience",
-      requiredProbeFields: { paymentCount: "integer" },
+      // Requires an application failure hook. Remove this case until configured.
+      // Built-in Stripe marker: data.object.metadata.invariant_test = trigger_db_failure.
+      // Razorpay marker: payload.payment.entity.notes.invariant_test = trigger_db_failure.
+      // A pre-processing 500 checks rejection only, NOT transaction rollback.
+      // For queued failures, adapt expectHttp and assert a recorded failed job;
+      // see examples/sqlite-queue for an actual post-write rollback check.
+      name: "Injected rejection preserves the scoped ledger",
+      requiredProbeFields: paymentFields,
       description:
-        "Injected HTTP 500 must preserve the observed payment count",
+        "Injected HTTP 500 must preserve the scoped payment count and ledger balance",
       expectHttp: [500],
-      assertState: (state, httpRes, baseline) =>
-        Number.isSafeInteger(state.paymentCount) && Number.isSafeInteger(baseline.paymentCount) &&
-        state.paymentCount === baseline.paymentCount
+      assertState: unchanged
     }
 
     // -------------------------------------------------------------------------
@@ -109,13 +137,11 @@ module.exports = {
     {
       scenario: "concurrent_race_condition",
       name: "queue_concurrency_lock",
-      requiredProbeFields: { paymentCount: "integer" },
+      requiredProbeFields: paymentFields,
       description:
         "Simultaneous webhook delivery burst must preserve exact single record under concurrency",
       expectHttp: [200, 202],
-      assertState: (state, httpRes, baseline) =>
-        Number.isSafeInteger(state.paymentCount) && Number.isSafeInteger(baseline.paymentCount) &&
-        state.paymentCount === baseline.paymentCount + 1
+      assertState: creditOnce
     },
     {
       scenario: "partial_refund_bounds",
@@ -179,7 +205,9 @@ function handleInit() {
     console.log(
       `1. Open ${fmt.cyan("invariant.config.js")} and customize your targetUrl and probeUrl.`
     );
-    console.log(`2. Run ${fmt.bold("npx @yavona/invariant test stripe-webhooks")} to execute invariants testing.\n`);
+    console.log("2. Implement the documented probe contract; map synthetic payloads to your fixture and set the expected customer, currency, and amount.");
+    console.log("3. Implement the failure hook or remove server_error_resilience until ready.");
+    console.log(`4. Run ${fmt.bold("npx @yavona/invariant@alpha doctor")} before ${fmt.bold("npx @yavona/invariant@alpha test payment --report-dir ./reports")}.\n`);
 
     process.exit(0);
   } catch (err) {

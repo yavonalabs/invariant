@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0-alpha.2 — 2026-09-26
+
+- Strengthened newly generated payment checks to include scoped customer/currency, exact ledger changes, and an explicit application completion assumption. Existing configurations are not overwritten; compare a freshly generated config before migrating.
+- Added probe-contract and fixture-mapping guidance, failure-hook prerequisites, and a one-check onboarding sequence. Aligned example URLs and local secrets, explained demo scope and Python commands, and added SQLite case descriptions and timing rationale.
+- Failed terminal runs without reports now explain how to capture HTML differences and observation timelines, including re-run and manual-review cautions. Report generation remains opt-in.
+
 ## 0.3.0-alpha.1
 
 This alpha makes webhook test outcomes depend on observed application state and explicit expectations. It is a development and staging test tool, not certification of payment correctness or a production audit.

@@ -1,6 +1,6 @@
 {
   "name": "@yavona/invariant",
-  "version": "0.3.0-alpha.1",
+  "version": "0.3.0-alpha.2",
   "description": "Invariant — Test payment webhook scenarios and observe application state assertions locally.",
   "main": "src/index.js",
   "bin": {

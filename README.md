@@ -4,7 +4,7 @@
 > Test Stripe and Razorpay webhook scenarios locally, then observe explicit state assertions through your application’s probe endpoint.
 
 [![GitHub Actions CI](https://github.com/yavonalabs/invariant/actions/workflows/ci.yml/badge.svg)](https://github.com/yavonalabs/invariant/actions)
-[![NPM Version](https://img.shields.io/npm/v/@yavona/invariant.svg?style=flat-square&color=blue&cacheSeconds=300&refresh=0.3.0-alpha.1)](https://www.npmjs.com/package/@yavona/invariant)
+[![NPM Version](https://img.shields.io/npm/v/@yavona/invariant.svg?style=flat-square&color=blue&cacheSeconds=300&refresh=0.3.0-alpha.2)](https://www.npmjs.com/package/@yavona/invariant)
 [![GitHub Stars](https://img.shields.io/github/stars/yavonalabs/invariant?style=flat-square&color=yellow)](https://github.com/yavonalabs/invariant/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
@@ -15,6 +15,8 @@
 ## 🚀 Try the Synthetic Payment-State Demo
 
 Compare a flawed and a fixed in-memory payment service using 20 distinct simulated payments, real local HTTP requests, and the same assertion observer used by the CLI. Only the concurrent balance check is executed; this demo does not test signatures, idempotency, or crash recovery. **No runtime package dependencies, Docker, database, or credentials.**
+
+The 20 payments are inputs to one demo check, not the eight configurable webhook scenarios below. To test your application, you supply a read-only state endpoint (the **probe**) and a JavaScript condition (the **assertion**). Invariant records state before delivery (the **baseline**) and samples afterward for the configured **observation window**.
 
 ```bash
 npx @yavona/invariant@alpha demo
@@ -68,11 +70,10 @@ app.get('/api/db-state', async (req, res) => {
   // Block probe route in production
   if (process.env.NODE_ENV === 'production') return res.status(404).end();
 
-  // 💡 NOTE: Replace these calls with your ORM / SQL query layer (Prisma, Drizzle, Mongoose, Knex)
-  const paymentCount = await db.payments.count();
-  const ledgerBalance = await db.ledger.sum('amount');
-  
-  res.json({ paymentCount, ledgerBalance });
+  // Implement this adapter using your ORM/SQL layer and a consistent snapshot.
+  // It must read actual state for this isolated fixture, including running work.
+  const state = await readPaymentTestSnapshot({ customerId: 'test_customer', currency: 'USD' });
+  res.json(state); // customerId, currency, paymentCount, ledgerBalance, pendingJobs, payments
 });
 ```
 
@@ -87,7 +88,7 @@ Stripe HMAC verification requires the unparsed raw `Buffer` body. Fix this by us
 ```javascript
 // Express.js Webhook Route Setup
 app.post(
-  '/api/webhooks/stripe',
+  '/api/webhook',
   express.raw({ type: 'application/json' }), // Preserves raw Buffer for HMAC validation
   async (req, res) => {
     const sig = req.headers['stripe-signature'];
@@ -132,10 +133,59 @@ npx @yavona/invariant@alpha init
 
 Edit the generated URLs, signing secret, assertions, and fixture identifiers for your test environment. Reset is disabled by default. Scope probe queries to this test’s records or use an isolated database; unrelated writes can invalidate aggregate assertions. The ordering example also requires a `payments` array; adapt its illustrative corruption-marker check to your schema.
 
+Start with only the scenarios your application supports. In particular, remove `server_error_resilience` until you implement its failure hook. Generating a config does not implement a probe or integrate the synthetic fixtures with your database.
+
 ### 2. Execute Stripe Webhook Invariant Tests
 ```bash
-INVARIANT_WEBHOOK_SECRET=whsec_xyz npx @yavona/invariant@alpha test stripe-webhooks
+INVARIANT_WEBHOOK_SECRET=whsec_yavona_secret_12345 npx @yavona/invariant@alpha test payment
 ```
+
+In PowerShell, set `$env:INVARIANT_WEBHOOK_SECRET = "whsec_yavona_secret_12345"` first, then run `npx @yavona/invariant@alpha test payment`. Use the same local test signing secret in your application. `test payment` uses the config's provider; if changing provider, also update fixture mapping and expected currency.
+
+Commands using `@alpha` select the published alpha. Changes described under **Unreleased** in the changelog require a repository checkout and `node src/index.js` until published. For reproducible evaluations, record the CLI version and pin that version in subsequent commands.
+
+## Probe contract and fixture mapping
+
+Your application must implement `GET /api/db-state` (or the URL you configure). Return a consistent JSON snapshot from your test database, scoped to the same customer and currency as your event:
+
+```json
+{"customerId":"test_customer","currency":"USD","paymentCount":0,"ledgerBalance":0,"pendingJobs":0,"payments":[]}
+```
+
+These are sample baseline values, not a response to hard-code. `paymentCount` counts relevant payment effects; `ledgerBalance` is an integer in minor units (5000 = USD 50.00); `pendingJobs` includes queued and running work for this fixture. Replace the completion condition if your app uses different semantics. An empty queue alone cannot prove success or exclude delayed retries. Return identity and currency from the scoped data, and expose additional evidence when checking other customers, entitlements, or failed jobs.
+
+The earlier Express snippet illustrates route placement; `readPaymentTestSnapshot` is an adapter you must implement using your database, not a function supplied by Invariant. It must filter by customer/currency and read a consistent snapshot. Do not expose this test endpoint publicly in production. The CLI omits URL query strings from output to protect sensitive values; review the configured scope locally. Keep report labels free of customer data.
+
+For a first Stripe check, keep just `duplicate_delivery` in the generated `invariants` array and add this property to that case:
+
+```javascript
+generatePayload: (eventId, baseline) => ({
+  id: eventId,
+  object: "event",
+  type: "payment_intent.succeeded",
+  livemode: false,
+  data: { object: {
+    id: "pi_" + eventId,
+    object: "payment_intent",
+    customer: "test_customer", // Seed this synthetic customer in your app first.
+    amount: 5000,
+    currency: "usd",
+    status: "succeeded"
+  } }
+}),
+```
+
+This minimal fixture may need additional fields required by your handler. `generatePayload(eventId, baseline)` must synchronously return the **complete event**, replacing the built-in fixture. The CLI signs it and reuses it for both duplicate deliveries. Keep payment IDs unique across runs and identical within a duplicate pair. A static `payload` object is also supported, but reusing its IDs across runs can change the expected outcome. For Razorpay, provide its event shape and map `payload.payment.entity` to your own test data; the [reference configuration](examples/sqlite-queue/invariant.config.js) demonstrates both providers.
+
+End-to-end sequence for your already-running test application:
+
+1. Seed the synthetic customer, implement the scoped probe, and configure matching URLs and signing secrets.
+2. Run `init`, configure the one duplicate check and fixture above, and match its expected customer, currency, and amount.
+3. Run `npx @yavona/invariant@alpha doctor`. Resolve missing probe fields; doctor does not verify fixture mapping or signing compatibility.
+4. Run `npx @yavona/invariant@alpha test payment --report-dir ./reports`.
+5. Review the HTTP responses and state evidence. A correct run must add one payment and 5000 minor units to the scoped ledger; a correct row count with a wrong amount must fail. Review every report file before sharing.
+
+To exercise a working backend immediately, use the [SQLite walkthrough](examples/sqlite-queue/README.md), which includes the probe, signature verification, workers, and fixture mapping. Building an application's endpoint is a prerequisite, not something `init` performs.
 
 ---
 
@@ -196,61 +246,11 @@ Run it from a clone of this repository; it is a reference application rather tha
 
 ## Custom State Assertions (`invariant.config.js`)
 
-Invariant supports rich, arbitrary multi-table JSON state assertions against your application's probe endpoint:
+The generated starter checks the configured customer and currency, one new payment row, and the exact ledger increase once scoped work has settled. It also checks that rejection scenarios preserve the ledger and count. Adapt these assertions to your own schema and completion evidence; missing required fields produce an error rather than a pass.
 
-```javascript
-module.exports = {
-  targetUrl: process.env.INVARIANT_TARGET_URL || "http://localhost:3000/api/webhooks/stripe",
-  probeUrl: process.env.INVARIANT_PROBE_URL || "http://localhost:3000/api/db-state",
-  resetUrl: process.env.INVARIANT_RESET_URL || null,
-  provider: process.env.INVARIANT_PROVIDER || "stripe",
-  webhookSecret: process.env.INVARIANT_WEBHOOK_SECRET || "whsec_stripe_secret_12345",
-  httpTimeoutMs: Number(process.env.INVARIANT_HTTP_TIMEOUT_MS || 5000),
-  assertionTimeoutMs: Number(process.env.INVARIANT_ASSERTION_TIMEOUT_MS || 5000),
+Use the [probe and fixture guide](#probe-contract-and-fixture-mapping) for a first Stripe check, or the [SQLite configuration](examples/sqlite-queue/invariant.config.js) for runnable Stripe and Razorpay examples with job completion and rollback evidence. Add assertions for any additional effects you need to verify, such as entitlements or writes to other customers. A scoped balance alone cannot establish that other records were untouched.
 
-  invariants: [
-    {
-      scenario: "duplicate_delivery",
-      name: "ledger_idempotency",
-      description: "Duplicate webhooks must preserve single payment row and exact ledger balance",
-      expectHttp: [200, 202],
-      assertState: (state, httpRes, baseline) =>
-        Number.isSafeInteger(state.paymentCount) && Number.isSafeInteger(baseline.paymentCount) &&
-        state.paymentCount === baseline.paymentCount + 1 &&
-        Number.isSafeInteger(state.ledgerBalance) && Number.isSafeInteger(baseline.ledgerBalance) &&
-        state.ledgerBalance === baseline.ledgerBalance + 5000
-    },
-    {
-      scenario: "tampered_signature",
-      name: "security_signature",
-      description: "Invalid provider signature header must be rejected without mutating DB state",
-      expectHttp: [400, 401],
-      assertState: (state, httpRes, baseline) =>
-        Number.isSafeInteger(state.paymentCount) && Number.isSafeInteger(baseline.paymentCount) &&
-        state.paymentCount === baseline.paymentCount
-    },
-    {
-      scenario: "out_of_order",
-      name: "refund_bounds_check",
-      description: "Out-of-order refund events prior to payment must not corrupt state ledger",
-      expectHttp: [200, 202, 400],
-      assertState: (state, httpRes, baseline) =>
-        Number.isSafeInteger(state.refundedAmount) && Number.isSafeInteger(state.capturedAmount) &&
-        state.refundedAmount >= 0 && state.refundedAmount <= state.capturedAmount &&
-        Array.isArray(state.payments) && state.payments.every((p) => p && p.status !== "CORRUPTED")
-    },
-    {
-      scenario: "server_error_resilience",
-      name: "server_error_resilience",
-      description: "Server 500 errors must be handled gracefully without inserting corrupt DB records",
-      expectHttp: [500],
-      assertState: (state, httpRes, baseline) =>
-        Number.isSafeInteger(state.paymentCount) && Number.isSafeInteger(baseline.paymentCount) &&
-        state.paymentCount === baseline.paymentCount
-    }
-  ]
-};
-```
+Existing configurations are not changed by upgrading the CLI. Generate a fresh config in a separate directory and compare its assertions and field requirements with yours.
 
 ---
 
